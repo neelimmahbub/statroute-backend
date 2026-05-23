@@ -15,7 +15,7 @@ STATIC_FALLBACK_PATH: dict = {
         {
             "supplier_id": "FALLBACK",
             "quantity_allocated": 0,
-            "path": ["Requesting Hospital", "Direct Route — Fallback Active"],
+            "path": ["St. Jude", "City General"],
             "distance": 0.0,
         }
     ],
