@@ -25,6 +25,6 @@
 - [x] app/dashboard/views.py
 - [x] app/dashboard/templates/index.html (SSE feed + CHAOS button)
 
-## Phase 5: Polish [Claude Code] [ ]
-- [ ] Sentry middleware verification + end-to-end smoke test
-- [ ] README.md synthesis
+## Phase 5: Polish [Claude Code] [x]
+- [x] Sentry middleware verification + end-to-end smoke test
+- [x] README.md synthesis
