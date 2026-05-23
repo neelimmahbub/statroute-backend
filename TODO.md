@@ -15,10 +15,10 @@
 - [x] app/routing/engine.py (pure Dijkstra)
 - [x] app/routing/circuit.py (pybreaker + fallback + toggle/reset)
 - [x] app/agent/services.py (Gemini async wrapper)
-- [ ] app/inventory/models.py (find_supplier, decrement_inventory, load_initial_map_graph)
+- [x] app/inventory/models.py (find_supplier, decrement_inventory, load_initial_map_graph)
 
 ## Phase 3: Routing Pipeline [Cursor Agent] [ ]
-- [ ] app/routing/router.py (POST /api/emergency + chaos endpoints)
+- [x] app/routing/router.py (POST /api/emergency + chaos endpoints)
 - [ ] app/inventory/router.py (GET /api/inventory + POST /api/inventory/seed)
 
 ## Phase 4: Dashboard [Cursor Agent] [ ]
