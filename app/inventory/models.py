@@ -61,25 +61,19 @@ async def increment_inventory(
     item: str,
     qty: int,
 ) -> bool:
-    """Increment destination inventory after simulated delivery arrival."""
-    res = await asyncio.to_thread(
-        lambda: supabase.table("hospital_inventory")
-        .select("quantity")
-        .eq("name", hospital)
-        .eq("item", item)
-        .execute()
+    """Atomic increment via single-statement RPC — no read-modify-write race."""
+    response = await asyncio.to_thread(
+        lambda: supabase.rpc(
+            "increment_inventory",
+            {"p_name": hospital, "p_item": item, "p_qty": qty},
+        ).execute()
     )
-    if not res.data:
+    data = response.data
+    if data is None:
         return False
-    new_qty = res.data[0]["quantity"] + qty
-    res2 = await asyncio.to_thread(
-        lambda: supabase.table("hospital_inventory")
-        .update({"quantity": new_qty})
-        .eq("name", hospital)
-        .eq("item", item)
-        .execute()
-    )
-    return bool(res2.data)
+    if isinstance(data, list):
+        return len(data) > 0
+    return True
 
 
 async def decrement_inventory(

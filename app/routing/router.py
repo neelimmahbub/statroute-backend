@@ -15,8 +15,10 @@ from app.routing.circuit import breaker, STATIC_FALLBACK_PATH, toggle_breaker, r
 from app.database import supabase
 
 CACHE_TTL_SECONDS = 300
-DELIVERY_SIM_SECONDS = 5
 MAX_REQUEST_QUANTITY = 50
+SECONDS_PER_DISTANCE_UNIT = 1.0   # tune this to control demo speed
+MIN_DELIVERY_SECONDS = 3
+MAX_DELIVERY_SECONDS = 12
 
 router = APIRouter()
 
@@ -27,6 +29,8 @@ async def _simulate_delivery(
     item: str,
     total_quantity: int,
 ) -> None:
+    max_distance = max((r.distance for r in routes), default=0.0)
+    eta = max(MIN_DELIVERY_SECONDS, min(MAX_DELIVERY_SECONDS, round(max_distance * SECONDS_PER_DISTANCE_UNIT)))
     for route in routes:
         await event_bus.put({
             "type": "in_transit",
@@ -34,9 +38,9 @@ async def _simulate_delivery(
             "destination": destination,
             "item": item,
             "quantity": route.quantity_allocated,
-            "eta_seconds": DELIVERY_SIM_SECONDS,
+            "eta_seconds": eta,
         })
-    await asyncio.sleep(DELIVERY_SIM_SECONDS)
+    await asyncio.sleep(eta)
     await increment_inventory(supabase, destination, item, total_quantity)
     await event_bus.put({
         "type": "delivery_complete",
