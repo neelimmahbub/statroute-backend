@@ -4,7 +4,7 @@
 
 ## Stack
 - FastAPI 3.11+ (async, Pydantic v2)
-- Gemini 1.5 Flash via google-generativeai async
+- Gemini via google-generativeai async (model ID: `gemini-2.0-flash-lite`)
 - Supabase (PostgreSQL) via supabase-py
 - Redis via redis.asyncio (always access as request.app.state.redis)
 - pybreaker 1.2+ (CircuitBreaker on routing engine)
@@ -88,10 +88,13 @@ def reconstruct_path(
 ```
 Pure functions. No I/O. No side effects. Graph nodes are hospital name strings.
 
-### Routing algorithm
-Single-source Dijkstra runs ONCE from the requesting hospital (destination). All supplier candidates
-are ranked by their pre-computed distance. Partial fulfillment: accumulate top-ranked suppliers until
-total quantity is met. Cache stores single-supplier results only (partial results are not cached).
+### Routing algorithm (Reverse Dijkstra)
+Single-source Dijkstra runs ONCE **from the requesting hospital (destination)** — not from each supplier.
+Produces a distance map for every node in O((V+E) log V). Supplier candidates ranked in O(S log S)
+via O(1) distance lookups — no repeated Dijkstra calls.
+Partial fulfillment: accumulate top-ranked suppliers until quantity met.
+Cache stores single-supplier results only (partial fulfillment routes are not cached).
+X/Y coordinates in Supabase `hospital_inventory` table drive both graph edge weights and SVG map rendering.
 
 ### app/routing/circuit.py
 ```python
