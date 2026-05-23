@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, Request
 
-from app.bus import event_bus
+from app.bus import publish as event_bus_publish
 from app.database import supabase
 from app.inventory.models import load_initial_map_graph, reset_seed_data
 
@@ -23,7 +23,7 @@ async def _fetch_inventory_rows() -> list[dict[str, str | int | float]]:
 @router.get("")
 async def list_inventory() -> list[dict[str, str | int | float]]:
     rows = await _fetch_inventory_rows()
-    await event_bus.put(
+    await event_bus_publish(
         {
             "type": "inventory_snapshot",
             "rows": len(rows),
@@ -41,5 +41,5 @@ async def seed_inventory(request: Request) -> dict[str, str | int]:
     request.app.state.hospital_node_map = hospital_node_map
     await request.app.state.redis.flushdb()
     rows = await _fetch_inventory_rows()
-    await event_bus.put({"type": "inventory_updated", "rows": rows})
+    await event_bus_publish({"type": "inventory_updated", "rows": rows})
     return {"status": "seeded", "rows": count}

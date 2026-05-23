@@ -38,7 +38,7 @@
         <span class="text-rose-600 text-[10px] font-bold">!</span>
       </div>
       <div class="flex-1 min-w-0">
-        <p class="text-sm font-semibold text-slate-900 mb-1">Access Denied</p>
+        <p id="error-title" class="text-sm font-semibold text-slate-900 mb-1">Request Failed</p>
         <p id="error-message" class="text-sm text-slate-600 leading-relaxed"></p>
       </div>
     </div>
@@ -230,7 +230,8 @@ const EDGE_THRESHOLD = 5.5;
 
 // ── State ────────────────────────────────────────────────────────────────
 const nodeReg = {};
-let lastRoutePath = null;
+let lastRoutes = []; // array of SupplierRoute objects from route_dispatched
+let _cardSeq = 0;   // monotonic counter — avoids Date.now() collisions for rapid cards
 
 // ── Projection ───────────────────────────────────────────────────────────
 function project(x, y) {
@@ -284,28 +285,24 @@ function renderBaseMap(hospitals) {
   document.getElementById('map-labels').innerHTML = labelSvg;
 }
 
-// Animate route path
-function animateRoute(path, fallback) {
-  if (!path?.length) return;
-  lastRoutePath = path;
-
-  const activeEdges = document.getElementById('map-active-edges');
-  activeEdges.innerHTML = '';
-
-  // Reset all nodes
+// Reset all nodes to neutral state
+function resetMapNodes() {
   Object.keys(nodeReg).forEach(id => {
-    const safeId = id.replace(/\s/g, '-');
-    const el = document.getElementById(`node-${safeId}`);
-    const lb = document.getElementById(`label-${safeId}`);
+    const sid = id.replace(/\s/g, '-');
+    const el = document.getElementById(`node-${sid}`);
+    const lb = document.getElementById(`label-${sid}`);
     if (el) { el.setAttribute('fill', '#f1f5f9'); el.setAttribute('stroke', '#94a3b8'); el.setAttribute('r', '6'); el.style.filter = ''; }
-    if (lb) lb.setAttribute('fill', '#94a3b8');
+    if (lb) { lb.setAttribute('fill', '#94a3b8'); lb.removeAttribute('font-weight'); }
   });
+}
 
+// Draw one route's edges + nodes (does NOT reset — call resetMapNodes first)
+function drawRoutePath(path, fallback, delayBase = 0) {
+  if (!path?.length) return;
   const stroke = fallback ? '#f59e0b' : '#6366f1';
-  const nodeColor = fallback ? '#f59e0b' : '#6366f1';
   const glowFilter = fallback ? '' : 'url(#node-glow)';
+  const activeEdges = document.getElementById('map-active-edges');
 
-  // Draw active edges with staggered dashoffset animation
   path.forEach((id, i) => {
     if (i === path.length - 1) return;
     const a = nodeReg[id], b = nodeReg[path[i + 1]];
@@ -318,26 +315,33 @@ function animateRoute(path, fallback) {
     line.setAttribute('stroke-linecap', 'round');
     line.setAttribute('stroke-dasharray', len);
     line.setAttribute('stroke-dashoffset', len);
-    line.style.transition = `stroke-dashoffset 0.65s cubic-bezier(0.16,1,0.3,1) ${i * 0.5}s`;
+    line.style.transition = `stroke-dashoffset 0.65s cubic-bezier(0.16,1,0.3,1) ${delayBase + i * 0.4}s`;
     activeEdges.appendChild(line);
     requestAnimationFrame(() => requestAnimationFrame(() => line.setAttribute('stroke-dashoffset', '0')));
   });
 
-  // Highlight nodes along path
+  // First node = destination (index 0), last = supplier (furthest)
   path.forEach((id, i) => {
-    const safeId = id.replace(/\s/g, '-');
-    const el = document.getElementById(`node-${safeId}`);
-    const lb = document.getElementById(`label-${safeId}`);
+    const sid = id.replace(/\s/g, '-');
+    const el = document.getElementById(`node-${sid}`);
+    const lb = document.getElementById(`label-${sid}`);
     if (!el) return;
     setTimeout(() => {
-      const isDest = i === path.length - 1;
-      el.setAttribute('fill', isDest ? '#f43f5e' : nodeColor);
+      const isDest = i === 0;
+      el.setAttribute('fill', isDest ? '#f43f5e' : stroke);
       el.setAttribute('stroke', isDest ? '#e11d48' : stroke);
       el.setAttribute('r', isDest ? '8' : '7');
       el.style.filter = isDest ? 'url(#dest-glow)' : glowFilter;
       if (lb) { lb.setAttribute('fill', isDest ? '#e11d48' : stroke); lb.setAttribute('font-weight', '600'); }
-    }, i * 500);
+    }, (delayBase + i * 0.4) * 1000);
   });
+}
+
+// Animate all routes (clears previous state, draws each path)
+function animateAllRoutes(routes, fallback) {
+  document.getElementById('map-active-edges').innerHTML = '';
+  resetMapNodes();
+  routes.forEach((route, idx) => drawRoutePath(route.path, fallback, idx * 0.5));
 
   document.getElementById('map-status').textContent = fallback ? 'FALLBACK' : 'ROUTING';
   document.getElementById('map-status').className = fallback
@@ -345,64 +349,78 @@ function animateRoute(path, fallback) {
     : 'text-[11px] text-indigo-600 font-mono uppercase tracking-widest animate-pulse';
 }
 
-// Animate transit dot along path using animateMotion
-function animateTransitDot(path, etaSeconds) {
+// Animate transit dot along path using rAF (cross-browser reliable)
+// supplierId used as unique key so multiple dots coexist for partial routes
+function animateTransitDot(supplierId, path, etaSeconds) {
   if (!path?.length || path.length < 2) return;
-  const coords = path.map(id => nodeReg[id]).filter(Boolean);
+  // Path is destination-first (reverse Dijkstra); supply travels supplier→destination
+  const coords = path.map(id => nodeReg[id]).filter(Boolean).reverse();
   if (coords.length < 2) return;
 
-  // Build SVG path string for motion
-  const d = coords.map((n, i) => `${i === 0 ? 'M' : 'L'} ${n.x},${n.y}`).join(' ');
-  const uid = Date.now();
-
-  // Remove previous transit dot
-  document.getElementById('transit-dot-group')?.remove();
+  const groupId = `transit-dot-${(supplierId || 'default').replace(/\s/g, '-')}`;
+  const prev = document.getElementById(groupId);
+  if (prev) { prev._cancelAnim?.(); prev.remove(); }
 
   const ns = 'http://www.w3.org/2000/svg';
-  const xlinkNs = 'http://www.w3.org/1999/xlink';
   const g = document.createElementNS(ns, 'g');
-  g.id = 'transit-dot-group';
+  g.id = groupId;
 
-  // Motion path (invisible)
-  const motionPath = document.createElementNS(ns, 'path');
-  motionPath.id = `mpath-${uid}`;
-  motionPath.setAttribute('d', d);
-  motionPath.setAttribute('fill', 'none');
-  g.appendChild(motionPath);
-
-  // Outer glow ring
   const glowRing = document.createElementNS(ns, 'circle');
-  glowRing.setAttribute('r', '10');
+  glowRing.setAttribute('r', '11');
   glowRing.setAttribute('fill', 'none');
   glowRing.setAttribute('stroke', '#6366f1');
-  glowRing.setAttribute('stroke-width', '1.5');
-  glowRing.setAttribute('opacity', '0.35');
-  const glowAnim = document.createElementNS(ns, 'animateMotion');
-  glowAnim.setAttribute('dur', `${etaSeconds}s`);
-  glowAnim.setAttribute('repeatCount', '1');
-  glowAnim.setAttribute('fill', 'freeze');
-  const glowMpath = document.createElementNS(ns, 'mpath');
-  glowMpath.setAttributeNS(xlinkNs, 'href', `#mpath-${uid}`);
-  glowAnim.appendChild(glowMpath);
-  glowRing.appendChild(glowAnim);
+  glowRing.setAttribute('stroke-width', '2');
+  glowRing.setAttribute('opacity', '0.4');
   g.appendChild(glowRing);
 
-  // Traveling dot
   const dot = document.createElementNS(ns, 'circle');
-  dot.setAttribute('r', '5');
+  dot.setAttribute('r', '6');
   dot.setAttribute('fill', '#4f46e5');
-  dot.style.filter = 'drop-shadow(0 0 4px rgba(79,70,229,0.7))';
-  const dotAnim = document.createElementNS(ns, 'animateMotion');
-  dotAnim.setAttribute('dur', `${etaSeconds}s`);
-  dotAnim.setAttribute('repeatCount', '1');
-  dotAnim.setAttribute('fill', 'freeze');
-  const dotMpath = document.createElementNS(ns, 'mpath');
-  dotMpath.setAttributeNS(xlinkNs, 'href', `#mpath-${uid}`);
-  dotAnim.appendChild(dotMpath);
-  dot.appendChild(dotAnim);
+  dot.style.filter = 'drop-shadow(0 0 5px rgba(79,70,229,0.8))';
   g.appendChild(dot);
 
   document.getElementById('map-transit').appendChild(g);
+
+  // Build segments with cumulative lengths
+  const segments = [];
+  let totalLen = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const dx = coords[i + 1].x - coords[i].x;
+    const dy = coords[i + 1].y - coords[i].y;
+    const len = Math.hypot(dx, dy);
+    segments.push({ x1: coords[i].x, y1: coords[i].y, x2: coords[i + 1].x, y2: coords[i + 1].y, len });
+    totalLen += len;
+  }
+
+  const duration = etaSeconds * 1000;
+  const startTime = performance.now();
+  let rafId;
+
+  function tick(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    let remaining = t * totalLen;
+    let cx = coords[0].x, cy = coords[0].y;
+
+    for (const seg of segments) {
+      if (remaining <= seg.len) {
+        const st = seg.len > 0 ? remaining / seg.len : 1;
+        cx = seg.x1 + (seg.x2 - seg.x1) * st;
+        cy = seg.y1 + (seg.y2 - seg.y1) * st;
+        break;
+      }
+      remaining -= seg.len;
+    }
+
+    dot.setAttribute('cx', cx);
+    dot.setAttribute('cy', cy);
+    glowRing.setAttribute('cx', cx);
+    glowRing.setAttribute('cy', cy);
+
+    if (t < 1) rafId = requestAnimationFrame(tick);
+  }
+
+  rafId = requestAnimationFrame(tick);
+  g._cancelAnim = () => cancelAnimationFrame(rafId);
 }
 
 // ── Incident feed cards ──────────────────────────────────────────────────
@@ -437,7 +455,7 @@ function addIncidentCard(result, fallback) {
 function addTransitCard(data) {
   const feed = document.getElementById('incident-feed');
   clearPlaceholder(feed);
-  const uid = Date.now();
+  const uid = ++_cardSeq;
   const eta = data.eta_seconds ?? 5;
 
   const card = document.createElement('div');
@@ -486,8 +504,23 @@ function addDeliveryCard(data) {
     }
   });
 
-  // Remove transit dot from SVG map
-  document.getElementById('transit-dot-group')?.remove();
+  // Remove all transit dots (one per supplier for partial routes)
+  document.getElementById('map-transit').querySelectorAll('[id^="transit-dot-"]').forEach(tg => {
+    tg._cancelAnim?.(); tg.remove();
+  });
+
+  // Clear active route line and reset node colours
+  document.getElementById('map-active-edges').innerHTML = '';
+  Object.keys(nodeReg).forEach(id => {
+    const sid = id.replace(/\s/g, '-');
+    const el = document.getElementById(`node-${sid}`);
+    const lb = document.getElementById(`label-${sid}`);
+    if (el) { el.setAttribute('fill', '#f1f5f9'); el.setAttribute('stroke', '#94a3b8'); el.setAttribute('r', '6'); el.style.filter = ''; }
+    if (lb) { lb.setAttribute('fill', '#94a3b8'); lb.removeAttribute('font-weight'); }
+  });
+  lastRoutes = [];
+  document.getElementById('route-info-bar').textContent = 'No active route';
+  document.getElementById('route-info-bar').className = 'border-t border-slate-100 px-5 py-2.5 text-[11px] font-mono text-slate-400 flex-shrink-0';
 
   const card = document.createElement('div');
   card.className = 'card-enter rounded-lg border border-emerald-200 bg-emerald-50 p-3 flex-shrink-0';
@@ -507,6 +540,13 @@ function renderInventory(items, flash = true) {
   const grid = document.getElementById('inventory-grid');
   if (!items?.length) return;
 
+  // Global total per item — bar width = hospital share of regional supply
+  const itemTotals = {};
+  items.forEach(r => {
+    const label = r.item_name ?? r.item ?? 'Unknown';
+    itemTotals[label] = (itemTotals[label] ?? 0) + (r.quantity ?? 0);
+  });
+
   // Group by hospital
   const byHospital = {};
   items.forEach(item => {
@@ -521,11 +561,11 @@ function renderInventory(items, flash = true) {
       <div class="space-y-1.5">
         ${rows.map(r => {
           const qty = r.quantity ?? 0;
-          const max = r.max_quantity ?? (qty > 0 ? qty * 2 : 100);
-          const pct = max > 0 ? Math.min(100, Math.round((qty / max) * 100)) : 0;
-          const barColor = qty === 0 ? 'bg-rose-400' : pct < 20 ? 'bg-amber-400' : 'bg-emerald-500';
-          const textColor = qty === 0 ? 'text-rose-600' : pct < 20 ? 'text-amber-600' : 'text-emerald-700';
           const label = r.item_name ?? r.item ?? 'Unknown';
+          const total = itemTotals[label] || 1;
+          const pct = Math.min(100, Math.round((qty / total) * 100));
+          const barColor = qty === 0 ? 'bg-rose-400' : pct < 15 ? 'bg-amber-400' : 'bg-emerald-500';
+          const textColor = qty === 0 ? 'text-rose-600' : pct < 15 ? 'text-amber-600' : 'text-emerald-700';
           return `
             <div>
               <div class="flex justify-between items-baseline mb-0.5">
@@ -569,6 +609,17 @@ function setCircuit(state) {
     badge.lastChild.textContent = ' CLOSED';
     warn?.classList.add('hidden');
     panel?.classList.remove('bg-amber-50', '!border-amber-200');
+    // Clear any lingering fallback route from map
+    document.getElementById('map-active-edges').innerHTML = '';
+    document.getElementById('map-transit').querySelectorAll('[id^="transit-dot-"]').forEach(tg => {
+      tg._cancelAnim?.(); tg.remove();
+    });
+    resetMapNodes();
+    lastRoutes = [];
+    document.getElementById('map-status').textContent = 'Idle';
+    document.getElementById('map-status').className = 'text-[11px] text-slate-400 font-mono uppercase tracking-widest';
+    document.getElementById('route-info-bar').textContent = 'No active route';
+    document.getElementById('route-info-bar').className = 'border-t border-slate-100 px-5 py-2.5 text-[11px] font-mono text-slate-400 flex-shrink-0';
   }
 }
 
@@ -579,19 +630,23 @@ function dispatch(data) {
       const result = data.result ?? data;
       const fallback = !!result.fallback;
       addIncidentCard(result, fallback);
-      const path = result.routes?.[0]?.path;
-      if (path) animateRoute(path, fallback);
-      const dist = result.routes?.[0]?.distance;
+      lastRoutes = result.routes ?? [];
+      if (lastRoutes.length) animateAllRoutes(lastRoutes, fallback);
       const bar = document.getElementById('route-info-bar');
-      bar.textContent = fallback
-        ? 'FALLBACK — Static map path active'
-        : `${path?.join(' → ')} · ${dist?.toFixed(1) ?? '—'} units`;
+      if (fallback) {
+        bar.textContent = 'FALLBACK — Static map path active';
+      } else if (lastRoutes.length > 1) {
+        bar.textContent = `Partial: ${lastRoutes.map(r => r.supplier_id).join(' + ')} → ${lastRoutes[0]?.path?.[0] ?? ''}`;
+      } else {
+        const path = lastRoutes[0]?.path;
+        const dist = lastRoutes[0]?.distance;
+        bar.textContent = `${path?.join(' → ')} · ${dist?.toFixed(1) ?? '—'} units`;
+      }
       bar.className = `border-t border-slate-100 px-5 py-2.5 text-[11px] font-mono flex-shrink-0 ${fallback ? 'text-amber-600' : 'text-indigo-600'}`;
       break;
     }
     case 'inventory_updated':
       renderInventory(data.inventory ?? data.items ?? data.rows ?? []);
-      // Register nodes from inventory data for SVG map
       if (data.rows?.length) {
         const hospitals = data.rows.reduce((acc, r) => {
           if (!acc.find(h => h.name === r.name)) acc.push({ name: r.name, x: r.x, y: r.y });
@@ -600,10 +655,13 @@ function dispatch(data) {
         renderBaseMap(hospitals);
       }
       break;
-    case 'in_transit':
+    case 'in_transit': {
       addTransitCard(data);
-      if (lastRoutePath) animateTransitDot(lastRoutePath, data.eta_seconds ?? 5);
+      // Match supplier to its specific route path for correct animation
+      const route = lastRoutes.find(r => r.supplier_id === data.supplier);
+      if (route) animateTransitDot(data.supplier, route.path, data.eta_seconds ?? 5);
       break;
+    }
     case 'delivery_complete':
       addDeliveryCard(data);
       document.getElementById('map-status').textContent = 'DELIVERED';
@@ -643,7 +701,10 @@ es.onmessage = e => { try { dispatch(JSON.parse(e.data)); } catch(_) {} };
  'in_transit','delivery_complete','parse_error'].forEach(t => {
   es.addEventListener(t, e => { try { dispatch({ type: t, ...JSON.parse(e.data) }); } catch(_) {} });
 });
+let _sseOpenedAt = Date.now();
+es.onopen = () => { _sseOpenedAt = Date.now(); };
 es.onerror = () => {
+  if (Date.now() - _sseOpenedAt < 3000) return; // ignore startup flicker
   const feed = document.getElementById('incident-feed');
   const c = document.createElement('div');
   c.className = 'card-enter rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-600 flex-shrink-0';
@@ -662,7 +723,8 @@ selector.addEventListener('change', () => {
 });
 
 // ── Error popup ───────────────────────────────────────────────────────────
-function showError(msg, duration = 4500) {
+function showError(msg, duration = 4500, title = 'Request Failed') {
+  document.getElementById('error-title').textContent = title;
   document.getElementById('error-message').textContent = msg;
   const popup = document.getElementById('error-popup');
   popup.classList.remove('hidden');
@@ -670,8 +732,12 @@ function showError(msg, duration = 4500) {
   popup._timer = setTimeout(() => popup.classList.add('hidden'), duration);
 }
 document.addEventListener('htmx:responseError', e => {
-  try { showError(JSON.parse(e.detail.xhr.responseText)?.detail || 'Request failed.'); }
-  catch(_) { showError('Request failed. Check the alert and try again.'); }
+  try {
+    const status = e.detail.xhr.status;
+    const detail = JSON.parse(e.detail.xhr.responseText)?.detail || 'Request failed.';
+    const title = status === 403 ? 'Access Denied' : status === 409 ? 'Inventory Conflict' : status === 422 ? 'Invalid Request' : 'Request Failed';
+    showError(detail, 4500, title);
+  } catch(_) { showError('Request failed. Check the alert and try again.'); }
 });
 document.addEventListener('htmx:sendError', () => showError('Cannot reach StatRoute server.'));
 </script>

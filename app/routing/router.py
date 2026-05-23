@@ -6,12 +6,12 @@ import pybreaker
 from fastapi import APIRouter, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse
 
-from app.bus import event_bus
+from app.bus import publish as event_bus_publish
 from app.agent.schemas import EmergencyInput, SupplierRoute, RouteResult
 from app.agent.services import parse_emergency
 from app.inventory.models import find_supplier, decrement_inventory, increment_inventory
 from app.routing.engine import compute_shortest_paths, reconstruct_path
-from app.routing.circuit import breaker, STATIC_FALLBACK_PATH, toggle_breaker, reset_breaker
+from app.routing.circuit import breaker, get_fallback_result, toggle_breaker, reset_breaker
 from app.database import supabase
 
 CACHE_TTL_SECONDS = 300
@@ -23,6 +23,30 @@ MAX_DELIVERY_SECONDS = 12
 router = APIRouter()
 
 
+async def _simulate_fallback_delivery(
+    destination: str, supplier: str, item: str, quantity: int
+) -> None:
+    await event_bus_publish({
+        "type": "in_transit",
+        "supplier": supplier,
+        "destination": destination,
+        "item": item,
+        "quantity": quantity,
+        "eta_seconds": MIN_DELIVERY_SECONDS,
+    })
+    await asyncio.sleep(MIN_DELIVERY_SECONDS)
+    await decrement_inventory(supabase, supplier, item, quantity)
+    await increment_inventory(supabase, destination, item, quantity)
+    await event_bus_publish({
+        "type": "delivery_complete",
+        "destination": destination,
+        "item": item,
+        "quantity": quantity,
+    })
+    rows = await _fetch_inventory_rows()
+    await event_bus_publish({"type": "inventory_updated", "rows": rows})
+
+
 async def _simulate_delivery(
     destination: str,
     routes: list[SupplierRoute],
@@ -32,7 +56,7 @@ async def _simulate_delivery(
     max_distance = max((r.distance for r in routes), default=0.0)
     eta = max(MIN_DELIVERY_SECONDS, min(MAX_DELIVERY_SECONDS, round(max_distance * SECONDS_PER_DISTANCE_UNIT)))
     for route in routes:
-        await event_bus.put({
+        await event_bus_publish({
             "type": "in_transit",
             "supplier": route.supplier_id,
             "destination": destination,
@@ -42,14 +66,14 @@ async def _simulate_delivery(
         })
     await asyncio.sleep(eta)
     await increment_inventory(supabase, destination, item, total_quantity)
-    await event_bus.put({
+    await event_bus_publish({
         "type": "delivery_complete",
         "destination": destination,
         "item": item,
         "quantity": total_quantity,
     })
     rows = await _fetch_inventory_rows()
-    await event_bus.put({"type": "inventory_updated", "rows": rows})
+    await event_bus_publish({"type": "inventory_updated", "rows": rows})
 
 
 async def _fetch_inventory_rows() -> list[dict[str, str | int | float]]:
@@ -81,9 +105,15 @@ async def route_emergency(
         raise HTTPException(422, "Emergency message is required.")
 
     known_items = list(request.app.state.known_items) if hasattr(request.app.state, "known_items") else None
-    emergency = await parse_emergency(
-        emergency_input.message, list(hospital_node_map.keys()), known_items
-    )
+    try:
+        emergency = await parse_emergency(
+            emergency_input.message,
+            list(hospital_node_map.keys()),
+            known_items,
+            fixed_hospital=selected_hospital or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
 
     # Normalize item name: case-insensitive match against known inventory items
     if known_items:
@@ -108,6 +138,19 @@ async def route_emergency(
     if not destination_node:
         raise HTTPException(422, f"Hospital '{emergency.hospital}' not in network.")
 
+    # Circuit check BEFORE cache — open circuit must short-circuit everything
+    if breaker.current_state == "open":
+        fallback = get_fallback_result(destination_node)
+        fallback["routes"][0]["quantity_allocated"] = emergency.quantity
+        fallback["total_quantity"] = emergency.quantity
+        await event_bus_publish({"type": "circuit_open"})
+        await event_bus_publish({"type": "route_dispatched", "result": fallback})
+        supplier = fallback["routes"][0]["supplier_id"]
+        asyncio.create_task(_simulate_fallback_delivery(
+            destination_node, supplier, emergency.item, emergency.quantity
+        ))
+        return fallback
+
     cache_key = hashlib.sha256(
         (emergency.hospital + emergency.item + emergency.urgency).encode()
     ).hexdigest()
@@ -128,9 +171,9 @@ async def route_emergency(
             result = RouteResult(
                 routes=[route], total_quantity=emergency.quantity, partial=False
             )
-            await event_bus.put({"type": "route_dispatched", "result": result.model_dump()})
+            await event_bus_publish({"type": "route_dispatched", "result": result.model_dump()})
             inventory_rows = await _fetch_inventory_rows()
-            await event_bus.put({"type": "inventory_updated", "rows": inventory_rows})
+            await event_bus_publish({"type": "inventory_updated", "rows": inventory_rows})
             asyncio.create_task(
                 _simulate_delivery(emergency.hospital, [route], emergency.item, emergency.quantity)
             )
@@ -146,8 +189,16 @@ async def route_emergency(
         sentry_sdk.capture_message(
             "StatRoute circuit open — routing fallback activated", level="warning"
         )
-        await event_bus.put({"type": "circuit_open"})
-        return STATIC_FALLBACK_PATH
+        fallback = get_fallback_result(destination_node)
+        fallback["routes"][0]["quantity_allocated"] = emergency.quantity
+        fallback["total_quantity"] = emergency.quantity
+        await event_bus_publish({"type": "circuit_open"})
+        await event_bus_publish({"type": "route_dispatched", "result": fallback})
+        supplier = fallback["routes"][0]["supplier_id"]
+        asyncio.create_task(_simulate_fallback_delivery(
+            destination_node, supplier, emergency.item, emergency.quantity
+        ))
+        return fallback
 
     suppliers = await find_supplier(supabase, emergency.item)
     ranked = sorted(
@@ -179,12 +230,16 @@ async def route_emergency(
             409, f"Insufficient regional inventory. Short by {remaining} units."
         )
 
+    decremented: list[tuple[str, int]] = []
     for route in routes:
         success = await decrement_inventory(
             supabase, route.supplier_id, emergency.item, route.quantity_allocated
         )
         if not success:
+            for sup_id, qty in decremented:
+                await increment_inventory(supabase, sup_id, emergency.item, qty)
             raise HTTPException(409, f"Concurrent depletion at {route.supplier_id}.")
+        decremented.append((route.supplier_id, route.quantity_allocated))
 
     result = RouteResult(
         routes=routes,
@@ -204,9 +259,9 @@ async def route_emergency(
             ex=CACHE_TTL_SECONDS,
         )
 
-    await event_bus.put({"type": "route_dispatched", "result": result.model_dump()})
+    await event_bus_publish({"type": "route_dispatched", "result": result.model_dump()})
     inventory_rows = await _fetch_inventory_rows()
-    await event_bus.put({"type": "inventory_updated", "rows": inventory_rows})
+    await event_bus_publish({"type": "inventory_updated", "rows": inventory_rows})
     asyncio.create_task(
         _simulate_delivery(emergency.hospital, routes, emergency.item, emergency.quantity)
     )
@@ -216,7 +271,7 @@ async def route_emergency(
 @router.post("/chaos/toggle")
 async def chaos_toggle() -> HTMLResponse:
     toggle_breaker()
-    await event_bus.put({"type": "circuit_open", "source": "chaos_toggle"})
+    await event_bus_publish({"type": "circuit_open", "source": "chaos_toggle"})
     return HTMLResponse(
         '<span id="circuit-breaker-badge" class="rounded-full border border-rose-500/70 bg-rose-500/10 px-3 py-1 font-medium text-rose-300">OPEN</span>'
     )
@@ -225,7 +280,7 @@ async def chaos_toggle() -> HTMLResponse:
 @router.post("/chaos/reset")
 async def chaos_reset() -> HTMLResponse:
     reset_breaker()
-    await event_bus.put({"type": "circuit_closed"})
+    await event_bus_publish({"type": "circuit_closed"})
     return HTMLResponse(
         '<span id="circuit-breaker-badge" class="rounded-full border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 font-medium text-emerald-300">CLOSED</span>'
     )

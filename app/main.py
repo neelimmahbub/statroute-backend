@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 
 from app.config import get_settings
-from app.bus import event_bus
+from app.bus import publish, subscribe
 from app.database import supabase
 from app.inventory.models import load_initial_map_graph, reset_seed_data
 from app.routing.router import router as routing_router
@@ -54,17 +54,22 @@ async def health() -> dict[str, str]:
 
 @app.get("/events")
 async def sse_events():
-    async def generator():
+    async def generator(q: asyncio.Queue):
         try:
             while True:
-                event = await event_bus.get()
+                event = await q.get()
                 event_type = str(event.get("type", "message"))
                 yield f"event: {event_type}\ndata: {json.dumps(event)}\n\n"
         except asyncio.CancelledError:
             return
 
+    async def stream():
+        async with subscribe() as q:
+            async for chunk in generator(q):
+                yield chunk
+
     return StreamingResponse(
-        generator(),
+        stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
