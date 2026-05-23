@@ -59,16 +59,39 @@ class SupplierNode(BaseModel):
     x: float
     y: float
 
-class PathResult(BaseModel):
+class SupplierRoute(BaseModel):
+    supplier_id: str
+    quantity_allocated: int
     path: list[str]
-    total_distance: float
+    distance: float
+
+class RouteResult(BaseModel):
+    routes: list[SupplierRoute]
+    total_quantity: int
+    partial: bool  # True if multiple suppliers used
 ```
 
 ### app/routing/engine.py
 ```python
-def compute_path(origin: str, destination: str, graph: dict[str, dict[str, float]]) -> PathResult:
+def compute_shortest_paths(
+    origin: str,
+    graph: dict[str, dict[str, float]]
+) -> tuple[dict[str, float], dict[str, str | None]]:
+    """Single-source Dijkstra. Returns (distances, predecessors) from origin to all nodes."""
+
+def reconstruct_path(
+    predecessors: dict[str, str | None],
+    origin: str,
+    target: str,
+) -> list[str]:
+    """Reconstruct path list from predecessors map."""
 ```
-Pure function. No I/O. No side effects. Graph nodes are hospital name strings.
+Pure functions. No I/O. No side effects. Graph nodes are hospital name strings.
+
+### Routing algorithm
+Single-source Dijkstra runs ONCE from the requesting hospital (destination). All supplier candidates
+are ranked by their pre-computed distance. Partial fulfillment: accumulate top-ranked suppliers until
+total quantity is met. Cache stores single-supplier results only (partial results are not cached).
 
 ### app/routing/circuit.py
 ```python
