@@ -307,6 +307,58 @@ function addIncidentCard(result, fallback) {
   feed.prepend(card);
 }
 
+function addTransitCard(data) {
+  const feed = document.getElementById('incident-feed');
+  const placeholder = feed.querySelector('.text-slate-700');
+  if (placeholder) placeholder.remove();
+
+  const uid = Date.now();
+  const eta = data.eta_seconds ?? 5;
+  const card = document.createElement('div');
+  card.className = 'incident-card rounded border border-amber-500/25 bg-amber-950/15 p-2.5 flex-shrink-0';
+  card.innerHTML = `
+    <div class="flex items-center gap-2 mb-1.5">
+      <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span>
+      <span class="font-mono text-slate-500 text-[10px]">${new Date().toLocaleTimeString()}</span>
+      <span class="ml-auto text-amber-400 text-[9px] font-bold tracking-widest">IN TRANSIT</span>
+    </div>
+    <p class="text-amber-300 text-[11px]">${data.supplier} → <span class="font-semibold text-amber-200">${data.destination}</span></p>
+    <p class="text-slate-600 text-[10px] mt-0.5">${data.quantity} units · ${data.item}</p>
+    <div class="flex items-center gap-2 mt-2">
+      <div class="flex-1 h-0.5 rounded-full bg-slate-800 overflow-hidden">
+        <div id="bar-${uid}" class="h-full bg-amber-500 rounded-full" style="width:0%;transition:width ${eta}s linear"></div>
+      </div>
+      <span id="eta-${uid}" class="text-[10px] text-amber-500 font-mono w-6 text-right">${eta}s</span>
+    </div>`;
+  feed.prepend(card);
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const bar = document.getElementById(`bar-${uid}`);
+    if (bar) bar.style.width = '100%';
+  }));
+  let t = eta;
+  const tick = setInterval(() => {
+    const el = document.getElementById(`eta-${uid}`);
+    if (el) el.textContent = `${Math.max(0, --t)}s`;
+    if (t <= 0) clearInterval(tick);
+  }, 1000);
+}
+
+function addDeliveryCard(data) {
+  const feed = document.getElementById('incident-feed');
+  const card = document.createElement('div');
+  card.className = 'incident-card rounded border border-emerald-500/30 bg-emerald-950/15 p-2.5 flex-shrink-0';
+  card.innerHTML = `
+    <div class="flex items-center gap-2 mb-1.5">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0"></span>
+      <span class="font-mono text-slate-500 text-[10px]">${new Date().toLocaleTimeString()}</span>
+      <span class="ml-auto text-emerald-400 text-[9px] font-bold tracking-widest">DELIVERED</span>
+    </div>
+    <p class="text-emerald-300 text-[11px] font-semibold">${data.destination} received ${data.quantity} units</p>
+    <p class="text-slate-600 text-[10px] mt-0.5">${data.item}</p>`;
+  feed.prepend(card);
+}
+
 // ── Inventory ────────────────────────────────────────────────────────────
 function renderInventory(items) {
   const grid = document.getElementById('inventory-grid');
@@ -320,7 +372,7 @@ function renderInventory(items) {
     return `
       <div class="rounded border border-slate-800/50 bg-slate-900/40 p-2.5">
         <div class="flex items-center justify-between mb-1">
-          <span class="text-[11px] text-slate-300 font-medium truncate">${item.hospital_name ?? item.hospital_id}</span>
+          <span class="text-[11px] text-slate-300 font-medium truncate">${item.hospital_name ?? item.hospital_id ?? item.name}</span>
           <span class="text-[10px] ${txt} font-bold ml-2 flex-shrink-0">${qty}</span>
         </div>
         <p class="text-[10px] text-slate-600 mb-1.5 truncate">${item.item_name ?? item.item}</p>
@@ -372,7 +424,9 @@ function dispatch(data) {
     }
     case 'circuit_open':   setCircuit('OPEN');   break;
     case 'circuit_closed': setCircuit('CLOSED'); break;
-    case 'inventory_updated': renderInventory(data.inventory ?? data.items ?? []); break;
+    case 'inventory_updated': renderInventory(data.inventory ?? data.items ?? data.rows ?? []); break;
+    case 'in_transit':        addTransitCard(data); break;
+    case 'delivery_complete': addDeliveryCard(data); break;
     case 'parse_error': {
       const c = document.createElement('div');
       c.className = 'incident-card rounded border border-rose-500/20 bg-rose-950/20 p-2.5 text-[10px] text-rose-400 flex-shrink-0';
