@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StatRoute Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://unpkg.com/htmx.org/dist/ext/sse.js"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <main
+    id="dashboard-root"
+    class="mx-auto max-w-7xl space-y-6 p-4 md:p-8"
+    hx-ext="sse"
+    sse-connect="/events"
+  >
+    <section class="flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">StatRoute Control Center</h1>
+        <p class="text-sm text-slate-400">Emergency supply routing with live network telemetry.</p>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="text-slate-400">Circuit:</span>
+        <span id="circuit-breaker-badge" class="rounded-full border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 font-medium text-emerald-300">CLOSED</span>
+      </div>
+    </section>
+    <div class="hidden" sse-swap="circuit_open" hx-target="#circuit-breaker-badge" hx-swap="outerHTML"></div>
+    <div class="hidden" sse-swap="circuit_closed" hx-target="#circuit-breaker-badge" hx-swap="outerHTML"></div>
+
+    <section class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <article class="xl:col-span-1 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+        <h2 class="mb-3 text-lg font-semibold">Submit Emergency Alert</h2>
+        <form
+          hx-post="/api/emergency"
+          hx-trigger="submit"
+          hx-swap="none"
+          class="space-y-3"
+        >
+          <label for="message" class="block text-sm text-slate-300">Raw alert message</label>
+          <textarea
+            id="message"
+            name="message"
+            rows="6"
+            required
+            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none ring-indigo-500/70 focus:ring"
+            placeholder="Massive pileup on I-95. St. Jude out of O-negative blood. Need 10 units immediately."
+          ></textarea>
+          <button
+            type="submit"
+            class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+          >
+            Dispatch Route
+          </button>
+        </form>
+      </article>
+
+      <article class="xl:col-span-2 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-lg font-semibold">Incident History Feed</h2>
+          <span class="text-xs text-slate-400">Live stream</span>
+        </div>
+        <div
+          id="incident-feed"
+          class="flex max-h-[24rem] flex-col gap-3 overflow-y-auto pr-1"
+          sse-swap="route_dispatched"
+          hx-swap="afterbegin"
+        >
+          <p class="rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-sm text-slate-400">
+            Waiting for route dispatch events...
+          </p>
+        </div>
+      </article>
+    </section>
+
+    <section class="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="text-lg font-semibold">Hospital Inventory</h2>
+        <p class="text-xs text-slate-400">Auto-updates from live SSE events</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-950 text-slate-300">
+            <tr>
+              <th class="px-3 py-2">Hospital</th>
+              <th class="px-3 py-2">Item</th>
+              <th class="px-3 py-2">Quantity</th>
+              <th class="px-3 py-2">Coordinates</th>
+            </tr>
+          </thead>
+          <tbody
+            id="inventory-table-body"
+            class="divide-y divide-slate-800"
+            sse-swap="inventory_updated"
+            hx-swap="innerHTML"
+          >
+            <tr>
+              <td class="px-3 py-3 text-slate-400" colspan="4">Waiting for inventory updates...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% if dev_mode %}
+    <section class="rounded-xl border border-amber-600/50 bg-amber-950/30 p-4">
+      <div class="mb-3">
+        <h2 class="text-lg font-semibold text-amber-200">CHAOS Controls</h2>
+        <p class="text-sm text-amber-300/80">Development mode only. Trip or reset the circuit breaker.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <button
+          class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500"
+          hx-post="/api/chaos/toggle"
+          hx-target="#circuit-breaker-badge"
+          hx-swap="outerHTML"
+        >
+          Trip Circuit
+        </button>
+        <button
+          class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+          hx-post="/api/chaos/reset"
+          hx-target="#circuit-breaker-badge"
+          hx-swap="outerHTML"
+        >
+          Reset Circuit
+        </button>
+      </div>
+    </section>
+    {% endif %}
+  </main>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StatRoute — Emergency Supply Dashboard</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #00ff88; min-height: 100vh; padding: 24px; }
+    h1 { font-size: 1.4rem; letter-spacing: 0.15em; margin-bottom: 24px; color: #fff; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .panel { background: #111; border: 1px solid #1a1a1a; border-radius: 6px; padding: 16px; }
+    .panel h2 { font-size: 0.75rem; letter-spacing: 0.2em; color: #555; text-transform: uppercase; margin-bottom: 12px; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 3px; font-size: 0.8rem; font-weight: bold; letter-spacing: 0.1em; }
+    .badge.closed { background: #003322; color: #00ff88; border: 1px solid #00ff88; }
+    .badge.open   { background: #330000; color: #ff4444; border: 1px solid #ff4444; }
+    #log { height: 320px; overflow-y: auto; font-size: 0.78rem; line-height: 1.6; }
+    .log-entry { padding: 4px 0; border-bottom: 1px solid #1a1a1a; }
+    .log-entry.circuit-open { color: #ff4444; }
+    .log-entry.route { color: #00ff88; }
+    .log-entry.error { color: #ffaa00; }
+    #map-svg { width: 100%; height: 260px; background: #0d0d0d; border-radius: 4px; }
+    .chaos-zone { margin-top: 24px; padding: 16px; border: 1px dashed #333; border-radius: 6px; }
+    .chaos-zone h2 { color: #ff4444; margin-bottom: 12px; font-size: 0.85rem; letter-spacing: 0.2em; text-transform: uppercase; }
+    button { padding: 8px 20px; border-radius: 4px; border: none; cursor: pointer; font-family: inherit; font-size: 0.85rem; letter-spacing: 0.1em; margin-right: 8px; }
+    .btn-chaos { background: #ff4444; color: #fff; }
+    .btn-reset { background: #004422; color: #00ff88; border: 1px solid #00ff88; }
+    .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    #route-detail { margin-top: 8px; font-size: 0.78rem; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>&#9889; STATROUTE &mdash; EMERGENCY SUPPLY ENGINE</h1>
+
+  <div class="status-row">
+    <span>Circuit Breaker:</span>
+    <span id="circuit-badge" class="badge closed">CLOSED</span>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Live Event Feed</h2>
+      <div id="log"></div>
+    </div>
+    <div class="panel">
+      <h2>Routing Map</h2>
+      <svg id="map-svg" viewBox="0 0 400 300">
+        <text x="50%" y="50%" text-anchor="middle" fill="#333" font-size="12">Awaiting route...</text>
+      </svg>
+      <div id="route-detail"></div>
+    </div>
+  </div>
+
+  {% if dev_mode %}
+  <div class="chaos-zone">
+    <h2>&#9888; Chaos Controls (Dev)</h2>
+    <button class="btn-chaos" hx-post="/api/chaos/toggle" hx-swap="none">TRIP CIRCUIT BREAKER</button>
+    <button class="btn-reset" hx-post="/api/chaos/reset" hx-swap="none">RESET CIRCUIT</button>
+  </div>
+  {% endif %}
+
+  <script>
+    const log = document.getElementById('log');
+    const badge = document.getElementById('circuit-badge');
+    const svg = document.getElementById('map-svg');
+    const routeDetail = document.getElementById('route-detail');
+
+    function addLog(text, cls) {
+      const entry = document.createElement('div');
+      entry.className = 'log-entry ' + (cls || '');
+      entry.textContent = new Date().toLocaleTimeString() + ' \u2014 ' + text;
+      log.prepend(entry);
+    }
+
+    function renderMap(routes, fallback) {
+      if (!routes || !routes.length) return;
+      const path = routes[0].path;
+      const n = path.length;
+      const W = 400, H = 260;
+      let inner = '';
+
+      const positions = path.map((name, i) => ({
+        name,
+        x: Math.round(50 + (i / Math.max(n - 1, 1)) * (W - 100)),
+        y: Math.round(H / 2),
+      }));
+
+      for (let i = 0; i < positions.length - 1; i++) {
+        const a = positions[i], b = positions[i + 1];
+        const dash = fallback ? '6,4' : 'none';
+        inner += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#00ff88" stroke-width="2" stroke-dasharray="${dash}"/>`;
+      }
+
+      positions.forEach((p, i) => {
+        const color = i === 0 ? '#ffaa00' : i === n - 1 ? '#ff4444' : '#00ff88';
+        inner += `<circle cx="${p.x}" cy="${p.y}" r="8" fill="${color}"/>`;
+        inner += `<text x="${p.x}" y="${p.y + 22}" text-anchor="middle" fill="#aaa" font-size="10">${p.name}</text>`;
+      });
+
+      svg.innerHTML = inner;
+      routeDetail.textContent = fallback
+        ? '\u26a0 FALLBACK ROUTE ACTIVE'
+        : 'Path: ' + path.join(' \u2192 ') + ' | Distance: ' + (routes[0].distance || 0).toFixed(2) + ' units';
+    }
+
+    const es = new EventSource('/events');
+    es.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'route_dispatched') {
+        const r = data.result;
+        const supplier = r.routes && r.routes[0] ? r.routes[0].supplier_id : 'unknown';
+        addLog('Route dispatched \u2190 supplier: ' + supplier, 'route');
+        renderMap(r.routes, r.fallback);
+      } else if (data.type === 'circuit_open') {
+        badge.textContent = 'OPEN';
+        badge.className = 'badge open';
+        addLog('Circuit breaker TRIPPED \u2014 fallback route active', 'circuit-open');
+      } else if (data.type === 'circuit_closed') {
+        badge.textContent = 'CLOSED';
+        badge.className = 'badge closed';
+        addLog('Circuit breaker RESET \u2014 primary routing restored', 'route');
+      } else if (data.type === 'parse_error') {
+        addLog('Parse error: ' + (data.detail || 'unknown'), 'error');
+      }
+    };
+
+    es.onerror = () => addLog('SSE connection lost \u2014 reconnecting...', 'error');
+  </script>
+</body>
+</html>

@@ -19,11 +19,11 @@
 
 ## Phase 3: Routing Pipeline [Cursor Agent] [ ]
 - [x] app/routing/router.py (POST /api/emergency + chaos endpoints)
-- [ ] app/inventory/router.py (GET /api/inventory + POST /api/inventory/seed)
+- [x] app/inventory/router.py (GET /api/inventory + POST /api/inventory/seed)
 
-## Phase 4: Dashboard [Cursor Agent] [ ]
-- [ ] app/dashboard/views.py
-- [ ] app/dashboard/templates/index.html (SSE feed + CHAOS button)
+## Phase 4: Dashboard [Cursor Agent] [x]
+- [x] app/dashboard/views.py
+- [x] app/dashboard/templates/index.html (SSE feed + CHAOS button)
 
 ## Phase 5: Polish [Claude Code] [ ]
 - [ ] Sentry middleware verification + end-to-end smoke test
