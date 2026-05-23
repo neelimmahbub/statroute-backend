@@ -73,16 +73,20 @@ async def load_initial_map_graph(
     for row in rows:
         coordinates_by_hospital[row["name"]] = (row["x"], row["y"])
 
+    # Sparse graph: only connect hospitals within MAX_EDGE_DISTANCE units.
+    # Prevents a complete graph where every route is a direct 2-node hop,
+    # ensuring Dijkstra exercises multi-hop path finding during the demo.
+    MAX_EDGE_DISTANCE = 5.5
+
     graph: dict[str, dict[str, float]] = {}
     for hospital_name, (x_coord, y_coord) in coordinates_by_hospital.items():
         graph[hospital_name] = {}
         for neighbor_name, (nx_coord, ny_coord) in coordinates_by_hospital.items():
             if hospital_name == neighbor_name:
                 continue
-            graph[hospital_name][neighbor_name] = math.dist(
-                (x_coord, y_coord),
-                (nx_coord, ny_coord),
-            )
+            d = math.dist((x_coord, y_coord), (nx_coord, ny_coord))
+            if d <= MAX_EDGE_DISTANCE:
+                graph[hospital_name][neighbor_name] = d
 
     hospital_node_map = {
         hospital_name: hospital_name for hospital_name in coordinates_by_hospital
