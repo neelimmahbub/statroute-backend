@@ -11,7 +11,7 @@
 - [x] ARCHITECTURE.md + TODO.md
 
 ## Phase 2: Core Modules [Cursor Agent] [ ]
-- [ ] app/agent/schemas.py (EmergencyInput, EmergencyRequest, SupplierNode, PathResult)
+- [x] app/agent/schemas.py (EmergencyInput, EmergencyRequest, SupplierNode, PathResult)
 - [x] app/routing/engine.py (pure Dijkstra)
 - [ ] app/routing/circuit.py (pybreaker + fallback + toggle/reset)
 - [ ] app/agent/services.py (Gemini async wrapper)
