@@ -10,14 +10,14 @@
 - [x] app/main.py (lifespan hook + SSE endpoint)
 - [x] ARCHITECTURE.md + TODO.md
 
-## Phase 2: Core Modules [Cursor Agent] [ ]
+## Phase 2: Core Modules [Cursor Agent] [x]
 - [x] app/agent/schemas.py (EmergencyInput, EmergencyRequest, SupplierNode, PathResult)
 - [x] app/routing/engine.py (pure Dijkstra)
 - [x] app/routing/circuit.py (pybreaker + fallback + toggle/reset)
 - [x] app/agent/services.py (Gemini async wrapper)
 - [x] app/inventory/models.py (find_supplier, decrement_inventory, load_initial_map_graph)
 
-## Phase 3: Routing Pipeline [Cursor Agent] [ ]
+## Phase 3: Routing Pipeline [Cursor Agent] [x]
 - [x] app/routing/router.py (POST /api/emergency + chaos endpoints)
 - [x] app/inventory/router.py (GET /api/inventory + POST /api/inventory/seed)
 
