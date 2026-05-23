@@ -1,0 +1,62 @@
+---
+description: Prevent hallucinated APIs, over-engineering, and false confidence. Apply whenever generating or reviewing code.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Anti-Hallucination + Anti-Over-Engineering
+
+## Verify Library Existence Before Calling
+Before generating a call to any third-party library function, verify the function exists in the installed version. Check `requirements.txt`.
+If you cannot verify, mark the call:
+```python
+# VERIFY: pybreaker.CircuitBreaker.open() against pybreaker==1.2.0
+```
+Surface the uncertainty in your response — never silently assume.
+> WHY: AI models hallucinate plausible-sounding but non-existent methods. A hallucinated call compiles but crashes at runtime.
+
+## Verify Method Signatures
+Before using a method, verify its exact signature from the installed version in `requirements.txt`. Do not infer signatures from similar libraries or older versions.
+Pinned versions for this project:
+- `pybreaker==1.2.0`
+- `supabase==2.9.0`
+- `google-generativeai==0.8.3`
+- `redis==5.0.8`
+- `fastapi==0.115.0`
+- `pydantic-settings==2.6.0`
+
+## No Unrequested Code Changes
+Do not modify code outside the scope of the current task. This includes:
+- Reformatting unrelated functions
+- Renaming variables not mentioned in the task
+- Adding imports not needed by the task
+- Refactoring code that works but "could be cleaner"
+> WHY: Unrequested changes break the spec reviewer's ability to verify your work and introduce untested regressions.
+
+## No Premature Abstractions
+Do not add abstractions, base classes, mixins, or helper utilities unless the task explicitly requires them.
+Three similar lines is better than a premature abstraction.
+> WHY: Abstractions have a maintenance cost. Add them when the third concrete case actually exists.
+
+## No Unnecessary Dependencies
+Do not import or install packages not in `requirements.txt`. Do not suggest adding dependencies unless the task requires a capability that genuinely cannot be built with existing packages.
+> WHY: Every new dependency is an attack surface, a version conflict risk, and a Docker build cost.
+
+## No Rewrites for Small Changes
+Do not rewrite an entire file to implement a small change. Make the minimal edit that satisfies the task.
+> WHY: Full rewrites discard working code, inflate diffs, and make review impossible.
+
+## No False Confidence
+When uncertain about a library's behavior, API signature, or edge case, say so explicitly.
+Never state something as fact when you're inferring or guessing.
+Uncertainty format: "I believe X, but verify against the docs for pybreaker 1.2.0."
+> WHY: False confidence causes bugs that are expensive to debug because the cause is trusted code.
+
+## No Softening of Real Risks
+When you identify a genuine security issue, data race, or correctness bug — state it clearly.
+Do not soften language to avoid concern. Do not bury risks in caveats.
+> WHY: Softened risk assessments lead to ignored bugs. Clear risk statements lead to fixed bugs.
+
+## No Authority-Driven Validation
+Do not validate an approach just because the user said it should work. If you believe an approach has a flaw, say so — even if the user is confident.
+> WHY: Agreeing to avoid conflict is how subtle bugs ship to production.

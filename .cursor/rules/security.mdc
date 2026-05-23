@@ -1,0 +1,59 @@
+---
+description: Secure coding rules for StatRoute — secrets, injection, input validation, authentication, and dependency hygiene. Always apply.
+globs: ["**/*.py", "**/*.yml", "**/*.yaml", "**/*.sql", "**/*.env*", "Dockerfile"]
+alwaysApply: true
+---
+
+# Security Rules
+
+## Secrets and Credentials
+- Never hardcode API keys, passwords, DSNs, or tokens in source code or config files
+- All secrets live in `.env` (gitignored) — referenced via `app/config.py` BaseSettings
+- Never log secrets, session tokens, or PII — not even at DEBUG level
+- `.env` must never be committed — `.env.example` with placeholder values is the only allowed form
+- Never copy `.env` into Docker image layers
+  > WHY: Secrets in source control or image layers are permanently exposed, even after deletion (git history, image caches).
+
+## Input Validation
+- All external input is validated by Pydantic at the API boundary — never bypass this
+- Never trust Gemini output without Pydantic validation — `EmergencyRequest(**data)` must run before any downstream call
+- Never construct SQL queries with string concatenation — use parameterized queries or Supabase RPC
+- Sanitize any user-supplied data before including in log messages
+  > WHY: Injection attacks (SQL, log injection, prompt injection) all exploit unsanitized input.
+
+## SQL Safety
+- All inventory mutations use the Supabase RPC `decrement_inventory` — never raw UPDATE with Python-interpolated values
+- All Supabase queries use the SDK's parameterized `.eq()`, `.gt()`, `.rpc()` methods — never f-strings in queries
+- Database user (Supabase anon key) must have least-privilege access — read/write on `hospital_inventory` only
+  > WHY: Parameterized queries are the only reliable defense against SQL injection.
+
+## Error Responses
+- Never return stack traces, internal exception messages, or file paths in HTTP responses
+- `HTTPException` detail strings must be user-safe — no system internals
+- Log full error details server-side (Sentry); return generic messages client-side
+  > WHY: Stack traces reveal architecture, file paths, and library versions — all useful for attackers.
+
+## Authentication and Headers
+- CORS: configure allowed origins explicitly in FastAPI — never `allow_origins=["*"]` in production
+- Never disable HTTPS in production (not applicable for local dev/Docker)
+- Sentry DSN is a secret — load from env, never hardcode
+  > WHY: Wildcard CORS allows any site to make credentialed requests on behalf of your users.
+
+## Dependency Hygiene
+- Pin all dependency versions in `requirements.txt` — no unpinned `>=` or `~=` in production
+- Regularly check for known CVEs in pinned packages (use `pip-audit` or similar)
+- Never install packages at runtime inside the container
+  > WHY: Unpinned dependencies silently update to versions with breaking changes or vulnerabilities.
+
+## Docker Security
+- Never run the application as root inside the container — use a non-root user
+- No secrets in `Dockerfile` ENV instructions or image layers
+- No `.env` file copied into the image — use `env_file` in `docker-compose.yml` at runtime
+- Add `.dockerignore` to exclude `.git`, `.env`, `__pycache__`, `.venv`
+  > WHY: Root processes in containers can escape to the host. Secrets in image layers persist in every layer cache.
+
+## Avoid Dangerous Functions
+- Never use `eval()`, `exec()`, or `subprocess` with user-supplied input
+- Never use `pickle` with untrusted data
+- Gemini output is untrusted external data — always parse via `json.loads()` + Pydantic, never `eval()`
+  > WHY: Dynamic code execution with external input is arbitrary code execution.

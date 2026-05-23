@@ -1,0 +1,64 @@
+---
+description: Docker and infrastructure rules for StatRoute — non-root user, healthcheck, image hygiene, and PostgreSQL/Supabase SQL discipline.
+globs: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "docker-compose*.yaml", ".dockerignore", "**/*.sql"]
+alwaysApply: false
+---
+
+# Docker + Infrastructure Rules
+
+## Dockerfile
+- Always specify a non-root user before CMD:
+  ```dockerfile
+  RUN adduser --disabled-password --gecos "" appuser
+  USER appuser
+  ```
+- Add HEALTHCHECK on the web service:
+  ```dockerfile
+  HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+  ```
+- Layer cache order: `COPY requirements.txt` → `RUN pip install` → `COPY . .` (source last)
+- Combine RUN commands with `&&` to minimize layers
+- Never add secrets in `ENV` instructions — use `env_file` in docker-compose at runtime
+  > WHY: Non-root + HEALTHCHECK are the minimum production-readiness bar. Root processes in containers are a containment escape risk.
+
+## .dockerignore
+Always maintain a `.dockerignore` that excludes:
+```
+.git
+.env
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+*.egg-info
+```
+> WHY: Without .dockerignore, the build context sends your entire git history and local secrets to the Docker daemon.
+
+## docker-compose.yml
+- `env_file: .env` at runtime — never bake secrets into the image
+- `depends_on` for service startup order
+- Mount source as volume only in development — remove in production builds
+- Redis service: use `redis:alpine` (minimal attack surface)
+  > WHY: Volume mounts in production containers allow host filesystem access.
+
+## PostgreSQL / Supabase SQL
+- Use `TIMESTAMPTZ` not `TIMESTAMP` for all datetime columns
+  > WHY: `TIMESTAMP` stores local time without timezone — ambiguous across DST transitions and server migrations.
+- Always add `NOT NULL` constraints where nullable values are not intentional
+- Index all columns used in `WHERE`, `JOIN`, and `ORDER BY` clauses
+- Use `UNIQUE(name, item)` constraints at the DB layer — not just application layer
+- Migrations must be non-destructive: add columns with defaults, never drop without a rollback plan
+- All mutations go through parameterized RPC functions — never raw string interpolation
+  > WHY: DB-level constraints are the last line of defense. Application-layer validation can be bypassed; DB constraints cannot.
+
+## Supabase RPC Contract
+The `decrement_inventory` RPC is the only mutation path for inventory. Its signature:
+```sql
+decrement_inventory(p_name TEXT, p_item TEXT, p_qty INTEGER) RETURNS SETOF hospital_inventory
+```
+- Called as: `supabase.rpc("decrement_inventory", {"p_name": ..., "p_item": ..., "p_qty": ...})`
+- Empty `response.data` = 0 rows updated = insufficient stock → return `False`
+- Never replicate this logic in Python
+  > WHY: The Postgres row-lock in the RPC is the only concurrency-safe path. Python-side logic has a TOCTOU race.
