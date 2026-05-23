@@ -1,0 +1,90 @@
+import asyncio
+import math
+
+from supabase import Client
+
+from app.agent.schemas import SupplierNode
+
+
+async def find_supplier(supabase: Client, item: str) -> list[SupplierNode]:
+    """
+    Args: Supabase client, inventory item name.
+    Returns: Hospitals with positive stock for the requested item.
+    """
+    response = await asyncio.to_thread(
+        lambda: supabase.table("hospital_inventory")
+        .select("name, quantity, x, y")
+        .eq("item", item)
+        .gt("quantity", 0)
+        .execute()
+    )
+    rows = response.data or []
+    return [
+        SupplierNode(
+            id=row["name"],
+            node=row["name"],
+            available_qty=row["quantity"],
+            x=row["x"],
+            y=row["y"],
+        )
+        for row in rows
+    ]
+
+
+async def decrement_inventory(
+    supabase: Client,
+    supplier_id: str,
+    item: str,
+    qty: int,
+) -> bool:
+    """
+    Args: Supabase client, supplier hospital name, inventory item, decrement quantity.
+    Returns: True when at least one row was updated, otherwise False.
+    """
+    response = await asyncio.to_thread(
+        lambda: supabase.rpc(
+            "decrement_inventory",
+            {"p_name": supplier_id, "p_item": item, "p_qty": qty},
+        ).execute()
+    )
+    data = response.data
+    if data is None:
+        return False
+    if isinstance(data, list):
+        return len(data) > 0
+    return True
+
+
+async def load_initial_map_graph(
+    supabase: Client,
+) -> tuple[dict[str, dict[str, float]], dict[str, str]]:
+    """
+    Args: Supabase client.
+    Returns: Tuple of graph adjacency map and hospital-to-node map.
+    """
+    response = await asyncio.to_thread(
+        lambda: supabase.table("hospital_inventory")
+        .select("name, x, y")
+        .execute()
+    )
+
+    rows = response.data or []
+    coordinates_by_hospital: dict[str, tuple[float, float]] = {}
+    for row in rows:
+        coordinates_by_hospital[row["name"]] = (row["x"], row["y"])
+
+    graph: dict[str, dict[str, float]] = {}
+    for hospital_name, (x_coord, y_coord) in coordinates_by_hospital.items():
+        graph[hospital_name] = {}
+        for neighbor_name, (nx_coord, ny_coord) in coordinates_by_hospital.items():
+            if hospital_name == neighbor_name:
+                continue
+            graph[hospital_name][neighbor_name] = math.dist(
+                (x_coord, y_coord),
+                (nx_coord, ny_coord),
+            )
+
+    hospital_node_map = {
+        hospital_name: hospital_name for hospital_name in coordinates_by_hospital
+    }
+    return graph, hospital_node_map
