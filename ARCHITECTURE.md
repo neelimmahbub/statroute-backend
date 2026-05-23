@@ -4,7 +4,7 @@
 
 ## Stack
 - FastAPI 3.11+ (async, Pydantic v2)
-- Gemini via google-generativeai async (model ID: `gemini-2.0-flash-lite`)
+- Gemini via google-generativeai async (model ID: `gemini-3.1-flash-lite`)
 - Supabase (PostgreSQL) via supabase-py
 - Redis via redis.asyncio (always access as request.app.state.redis)
 - pybreaker 1.2+ (CircuitBreaker on routing engine)
