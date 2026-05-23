@@ -1,0 +1,41 @@
+---
+description: Git commit discipline and workflow rules for StatRoute.
+globs: **/*
+alwaysApply: false
+---
+
+# Git Workflow
+
+## Commit Message Format
+`type(scope): description`
+
+Types:
+- `feat` — new functionality
+- `fix` — bug fix
+- `chore` — tooling, config, scaffolding
+- `test` — adding or fixing tests
+- `docs` — documentation only
+- `refactor` — restructuring without behavior change
+
+Examples:
+- `feat(routing): add Dijkstra engine with PathResult schema`
+- `fix(inventory): handle zero-rowcount decrement as False`
+- `chore: handoff to cursor — phase 1 complete`
+
+## Commit Discipline
+- One logical change per commit — not one file per commit
+- Commit after each completed task, before switching tools
+- Never commit with failing tests
+- Never commit `.env` — only `.env.example`
+  > WHY: Small commits make rollback surgical. The Git boundary is the handoff point between Claude Code and Cursor.
+
+## Dual-Agent Handoff Protocol
+- Claude Code finishes a phase → updates `TODO.md` → commits → Cursor picks up
+- Cursor finishes a module → marks `TODO.md` checkbox → commits → returns to Claude Code
+- Commit message for handoffs: `chore: handoff to cursor — phase N complete`
+  > WHY: Clean commit = clean state = no merge conflicts between tools.
+
+## TODO.md Sync
+- After implementing each file, mark its checkbox `[x]` in `TODO.md`
+- Update `TODO.md` in the same commit as the implementation
+  > WHY: `TODO.md` is the single source of truth for sprint progress. Stale checkboxes mislead the next agent.

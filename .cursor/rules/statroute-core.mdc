@@ -1,0 +1,61 @@
+---
+description: StatRoute project-specific patterns and architectural constraints. Read before touching any file in this codebase.
+globs: app/**/*.py
+alwaysApply: true
+---
+
+# StatRoute Core Patterns
+
+You are a Senior Systems Architect implementing StatRoute — a FastAPI emergency supply routing engine. These rules are non-negotiable.
+
+## EventBus
+- Always import from `app.bus`: `from app.bus import event_bus`
+- Never define `asyncio.Queue()` inline anywhere
+- Push events with `await event_bus.put({"type": "...", ...})`
+  > WHY: All producers and the SSE consumer share one queue. Inline queues break the pipeline silently.
+
+## Redis Access
+- Always access via `request.app.state.redis` inside route handlers
+- Never import or instantiate `redis` directly in routers
+  > WHY: The connection pool is initialized once in the lifespan hook. Direct imports create unclosed connections.
+
+## App State (read-only at request time)
+- `request.app.state.static_network_graph` — `dict[str, dict[str, float]]`, loaded once at startup
+- `request.app.state.hospital_node_map` — `dict[str, str]`, name → node key
+- Never re-fetch these from Supabase during a request
+  > WHY: O(1) lookup vs. network round-trip per request.
+
+## Pydantic v2 (mandatory)
+- `.model_dump()` — not `.dict()`
+- `model_validate()` — not `parse_obj()`
+- `Literal["Critical", "High", "Medium"]` for urgency — never raw `str`
+  > WHY: `.dict()` is deprecated in Pydantic v2 and will be removed. Using it produces warnings that pollute logs.
+
+## Inventory Decrement Contract
+- `decrement_inventory(supabase, supplier_id, item, qty) -> bool`
+- Returns `False` if 0 rows updated (insufficient stock or concurrent depletion)
+- Caller raises HTTP 409 on `False`
+- NEVER subtract quantity in Python — always via Supabase RPC `decrement_inventory`
+  > WHY: Postgres row-lock prevents race conditions under concurrent load. Python-side arithmetic has TOCTOU vulnerability.
+
+## Routing Pipeline Order (POST /api/emergency)
+1. Parse with Gemini → validate `EmergencyRequest`
+2. Resolve `destination_node` from `hospital_node_map` → 422 if missing
+3. `sha256(hospital + item + urgency)` → Redis GET
+4. Cache HIT: try decrement → if fails, evict key + fall through to MISS path
+5. Cache MISS: `find_supplier` → Dijkstra (circuit-protected) → decrement → Redis SET
+6. `event_bus.put(route_dispatched)`
+
+Never reorder steps 4 and 5. The stale eviction loop is intentional.
+
+## Circuit Breaker
+- `breaker.call(compute_path, ...)` — sync call, pybreaker wraps synchronous Dijkstra
+- On `CircuitBreakerError`: use `STATIC_FALLBACK_PATH`, capture to Sentry, push `circuit_open` event
+- Inventory decrement ALWAYS runs after the try/except block, regardless of fallback
+  > WHY: Physical supplies are real even when the map visualizer fails.
+
+## Schema Separation
+- `EmergencyInput` — route parameter type (raw `message: str`)
+- `EmergencyRequest` — Gemini output schema (structured fields)
+- Never use `EmergencyRequest` as a FastAPI route parameter
+  > WHY: Conflating them causes FastAPI to reject raw text from the frontend.

@@ -1,0 +1,76 @@
+---
+description: Python 3.11+ and FastAPI best practices. Apply to all Python files.
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python + FastAPI Best Practices
+
+## Type Hints (mandatory)
+- All function parameters and return types must have type hints
+- Use `X | None` (Python 3.10+ union syntax) — not `Optional[X]`
+- Use `list[str]` not `List[str]` — built-in generics since 3.9
+- Use `TypedDict` or Pydantic models for structured dicts — never `dict[str, Any]`
+  > WHY: Type hints are machine-verified documentation. `Any` defeats the purpose.
+
+## Async Discipline
+- All I/O must be `async` — Supabase calls wrapped in `asyncio.to_thread(lambda: ...)`
+- Never call blocking I/O directly in an async function
+- `asyncio.to_thread` for synchronous SDK calls (supabase-py, pybreaker)
+  > WHY: A single blocking call in an async route freezes the entire event loop.
+
+## Naming Conventions
+- `snake_case` for functions, variables, modules
+- `PascalCase` for classes and Pydantic models
+- `UPPER_SNAKE_CASE` for module-level constants
+- Avoid abbreviations unless domain-standard (`qty`, `id`, `url` are fine)
+  > WHY: Consistent with PEP 8 and Python ecosystem standards.
+
+## Function Size
+- Max ~25 lines per function — extract helpers for complex logic
+- If a function needs a comment to explain what it does, split it
+  > WHY: Small functions are testable in isolation and reviewable at a glance.
+
+## FastAPI Patterns
+- Use `Depends()` for dependency injection — never instantiate dependencies inside route handlers
+- Use `Request` object to access `app.state` — do not use global variables in routers
+- Return typed dicts or Pydantic models from endpoints — never bare `dict`
+- Use `HTTPException` with specific status codes — never generic 500 for recoverable errors
+  > WHY: Consistent error shapes let clients handle failures predictably.
+
+## Error Handling
+- Raise `HTTPException` at the router layer — not in service/model functions
+- Service functions return typed results or raise domain exceptions
+- Catch `ValidationError` from Pydantic at call sites — never swallow it silently
+- Log structured errors — include `exc_info=True` for unexpected exceptions
+  > WHY: Separation of concerns — routers translate exceptions, services raise them.
+
+## Testing (pytest)
+- Write the failing test first (TDD) for pure functions
+- Test actual behavior — not implementation details
+- Mock only external dependencies (Supabase, Gemini API, Redis) — never mock internal logic
+- Use `pytest.raises` for expected exceptions — never `try/except` in tests
+  > WHY: Tests that mock internal logic give false confidence and break on refactors.
+
+## Constants
+- Extract magic numbers to named constants at module level
+- Example: `CACHE_TTL_SECONDS = 300` not `ex=300` inline
+  > WHY: Constants are searchable, reusable, and self-documenting.
+
+## Imports
+- Use absolute imports within `app/` — no relative imports
+- Group: stdlib → third-party → local (`app.*`) with blank lines between
+- No wildcard imports (`from x import *`)
+  > WHY: Absolute imports make refactoring safe and grep-friendly.
+
+## Security
+- Validate all external input at API boundary (Pydantic does this automatically)
+- Never log API keys, tokens, passwords, or PII
+- Sanitize error messages returned to clients — no stack traces in HTTP responses
+  > WHY: Error details in responses are an information leak vector.
+
+## Docstrings
+- One-line `Args:` / `Returns:` block on public functions — nothing more
+- No docstrings on private helpers or simple properties
+- Never document what the code does — document why it does it that way
+  > WHY: Good names document what. Docstrings document non-obvious constraints.

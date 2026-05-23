@@ -1,0 +1,58 @@
+---
+description: Clean code principles — apply when writing or reviewing any code in this project.
+globs: **/*
+alwaysApply: true
+---
+
+# Clean Code Rules
+
+## Single Responsibility
+- Each file, class, and function does exactly one thing
+- If you need "and" to describe what a function does, split it
+  > WHY: Focused units are testable, replaceable, and understandable independently.
+
+## Meaningful Names
+- Names reveal purpose — `find_supplier` not `get_thing`
+- No single-letter variables outside of loop counters and math
+- Names should answer: what does this do and why does it exist?
+  > WHY: Names are the primary form of documentation. Bad names create bugs.
+
+## DRY
+- Extract repeated logic into a named function
+- Single source of truth for constants, config, and schema definitions
+- Duplication that diverges becomes a bug
+  > WHY: Two copies of logic diverge over time. Every change becomes a search problem.
+
+## Constants Over Magic Numbers
+- Named constants at module level for all non-obvious values
+- `CACHE_TTL_SECONDS = 300` not `ex=300` scattered across files
+  > WHY: Constants communicate intent. `300` communicates nothing.
+
+## No Commented-Out Code
+- Delete dead code — git history preserves it
+- Never leave `# TODO: implement later` or placeholder functions
+  > WHY: Commented code rots silently and misleads future readers.
+
+## No Inventions
+- Implement exactly what the spec/task requires — nothing more
+- Do not add features, abstractions, or refactors not in the task
+  > WHY: Unrequested changes introduce untested behavior and scope creep.
+
+## Preserve Existing Code
+- Do not remove unrelated code when fixing or adding something
+- Do not restructure files outside your task scope
+  > WHY: Unrelated changes break the spec reviewer's ability to verify your work.
+
+## Single Chunk Edits
+- Provide all edits to a file in one operation
+- Never split one file's changes across multiple steps
+  > WHY: Partial edits leave files in broken intermediate states.
+
+## No Summaries
+- Do not summarize changes after making them
+- Do not narrate what you just did
+  > WHY: The diff communicates the change. Summaries are noise.
+
+## No Apologies, No Pleasantries
+- Output code or decisions — not commentary about the process
+  > WHY: Verbal overhead wastes tokens and obscures signal.
