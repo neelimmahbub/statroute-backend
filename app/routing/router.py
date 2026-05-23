@@ -114,6 +114,13 @@ async def route_emergency(
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc))
+    except Exception:
+        # Any other parse failure (Gemini 429/timeout/network) becomes a clean 422
+        # instead of leaking a 500 with internal traceback details.
+        raise HTTPException(
+            422,
+            "Could not parse emergency message. Please rephrase or use a built-in demo scenario.",
+        )
 
     # Normalize item name: case-insensitive match against known inventory items
     if known_items:
