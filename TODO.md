@@ -13,7 +13,7 @@
 ## Phase 2: Core Modules [Cursor Agent] [ ]
 - [x] app/agent/schemas.py (EmergencyInput, EmergencyRequest, SupplierNode, PathResult)
 - [x] app/routing/engine.py (pure Dijkstra)
-- [ ] app/routing/circuit.py (pybreaker + fallback + toggle/reset)
+- [x] app/routing/circuit.py (pybreaker + fallback + toggle/reset)
 - [ ] app/agent/services.py (Gemini async wrapper)
 - [ ] app/inventory/models.py (find_supplier, decrement_inventory, load_initial_map_graph)
 
