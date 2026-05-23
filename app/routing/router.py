@@ -80,9 +80,15 @@ async def route_emergency(
     if emergency_input is None:
         raise HTTPException(422, "Emergency message is required.")
 
+    known_items = list(request.app.state.known_items) if hasattr(request.app.state, "known_items") else None
     emergency = await parse_emergency(
-        emergency_input.message, list(hospital_node_map.keys())
+        emergency_input.message, list(hospital_node_map.keys()), known_items
     )
+
+    # Normalize item name: case-insensitive match against known inventory items
+    if known_items:
+        lower_map = {i.lower(): i for i in known_items}
+        emergency.item = lower_map.get(emergency.item.lower(), emergency.item)
 
     if selected_hospital and emergency.hospital.lower() != selected_hospital.lower():
         raise HTTPException(

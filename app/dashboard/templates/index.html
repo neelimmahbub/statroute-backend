@@ -441,7 +441,9 @@ function addTransitCard(data) {
   const eta = data.eta_seconds ?? 5;
 
   const card = document.createElement('div');
-  card.className = 'card-enter rounded-lg border border-amber-200 bg-amber-50 p-3 flex-shrink-0';
+  card.className = 'card-enter transit-card rounded-lg border border-amber-200 bg-amber-50 p-3 flex-shrink-0';
+  card.dataset.destination = data.destination ?? '';
+  card.dataset.item = data.item ?? '';
   card.innerHTML = `
     <div class="flex items-center gap-2 mb-1.5">
       <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span>
@@ -472,6 +474,21 @@ function addTransitCard(data) {
 
 function addDeliveryCard(data) {
   const feed = document.getElementById('incident-feed');
+
+  // Remove stale IN TRANSIT cards for this delivery
+  feed.querySelectorAll('.transit-card').forEach(el => {
+    const dest = el.dataset.destination;
+    const item = el.dataset.item;
+    if (!dest || dest === data.destination) {
+      el.style.transition = 'opacity 0.4s';
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 400);
+    }
+  });
+
+  // Remove transit dot from SVG map
+  document.getElementById('transit-dot-group')?.remove();
+
   const card = document.createElement('div');
   card.className = 'card-enter rounded-lg border border-emerald-200 bg-emerald-50 p-3 flex-shrink-0';
   card.innerHTML = `
@@ -486,7 +503,7 @@ function addDeliveryCard(data) {
 }
 
 // ── Inventory ────────────────────────────────────────────────────────────
-function renderInventory(items) {
+function renderInventory(items, flash = true) {
   const grid = document.getElementById('inventory-grid');
   if (!items?.length) return;
 
@@ -524,12 +541,13 @@ function renderInventory(items) {
     </div>`
   ).join('');
 
-  // Flash each card
-  grid.querySelectorAll('.inv-flash').forEach(el => {
-    el.style.animation = '';
-    void el.offsetWidth;
-    el.style.animation = 'flashGreen 700ms ease-out';
-  });
+  if (flash) {
+    grid.querySelectorAll('.inv-flash').forEach(el => {
+      el.style.animation = '';
+      void el.offsetWidth;
+      el.style.animation = 'flashGreen 700ms ease-out';
+    });
+  }
 }
 
 // ── Circuit state ────────────────────────────────────────────────────────���
@@ -603,6 +621,20 @@ function dispatch(data) {
     }
   }
 }
+
+// ── Bootstrap: load inventory + map on page open ─────────────────────────
+fetch('/api/inventory/')
+  .then(r => r.json())
+  .then(rows => {
+    if (!rows?.length) return;
+    renderInventory(rows, false);
+    const seen = new Set();
+    const hospitals = rows
+      .filter(r => !seen.has(r.name) && seen.add(r.name))
+      .map(r => ({ name: r.name, x: r.x, y: r.y }));
+    renderBaseMap(hospitals);
+  })
+  .catch(() => {});
 
 // ── SSE ───────────────────────────────────────────────────────────────────
 const es = new EventSource('/events');

@@ -16,6 +16,13 @@ from app.dashboard.views import router as dashboard_router
 
 settings = get_settings()
 
+
+async def _load_known_items() -> set[str]:
+    response = await asyncio.to_thread(
+        lambda: supabase.table("hospital_inventory").select("item").execute()
+    )
+    return {row["item"] for row in (response.data or [])}
+
 if settings.sentry_dsn:
     sentry_sdk.init(dsn=settings.sentry_dsn, traces_sample_rate=0.1)
 
@@ -28,6 +35,7 @@ async def lifespan(app: FastAPI):
     graph, hospital_node_map = await load_initial_map_graph(supabase)
     app.state.static_network_graph = graph
     app.state.hospital_node_map = hospital_node_map
+    app.state.known_items = await _load_known_items()
     yield
     await app.state.redis.aclose()
 

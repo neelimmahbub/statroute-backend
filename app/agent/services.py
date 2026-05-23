@@ -54,19 +54,29 @@ MOCK_DEMO_RESPONSES: dict[str, dict] = {
 }
 
 
-async def parse_emergency(text: str, valid_hospitals: list[str]) -> EmergencyRequest:
+async def parse_emergency(
+    text: str,
+    valid_hospitals: list[str],
+    valid_items: list[str] | None = None,
+) -> EmergencyRequest:
     """
-    Args: raw alert text, list of exact valid hospital name strings from app.state.hospital_node_map.
+    Args: raw alert text, list of exact hospital names, optional list of exact item names.
     Returns: validated EmergencyRequest.
     Falls back to MOCK_DEMO_RESPONSES on any API error (429, timeout, etc.).
     Raises original exception only if text is not a known demo scenario.
     """
     clean = text.strip()
     try:
+        items_line = (
+            f"Valid supply item names — use EXACTLY one of these strings, verbatim:\n"
+            f"{', '.join(valid_items)}\n\n"
+            if valid_items else ""
+        )
         prompt = (
             f"Extract the emergency supply request from this message.\n\n"
             f"Valid hospital names — use EXACTLY one of these strings, verbatim:\n"
             f"{', '.join(valid_hospitals)}\n\n"
+            f"{items_line}"
             f"Message: {text}"
         )
         response = await asyncio.to_thread(_model.generate_content, prompt)
