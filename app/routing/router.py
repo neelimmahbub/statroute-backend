@@ -9,14 +9,42 @@ from fastapi.responses import HTMLResponse
 from app.bus import event_bus
 from app.agent.schemas import EmergencyInput, SupplierRoute, RouteResult
 from app.agent.services import parse_emergency
-from app.inventory.models import find_supplier, decrement_inventory
+from app.inventory.models import find_supplier, decrement_inventory, increment_inventory
 from app.routing.engine import compute_shortest_paths, reconstruct_path
 from app.routing.circuit import breaker, STATIC_FALLBACK_PATH, toggle_breaker, reset_breaker
 from app.database import supabase
 
 CACHE_TTL_SECONDS = 300
+DELIVERY_SIM_SECONDS = 5
 
 router = APIRouter()
+
+
+async def _simulate_delivery(
+    destination: str,
+    routes: list[SupplierRoute],
+    item: str,
+    total_quantity: int,
+) -> None:
+    for route in routes:
+        await event_bus.put({
+            "type": "in_transit",
+            "supplier": route.supplier_id,
+            "destination": destination,
+            "item": item,
+            "quantity": route.quantity_allocated,
+            "eta_seconds": DELIVERY_SIM_SECONDS,
+        })
+    await asyncio.sleep(DELIVERY_SIM_SECONDS)
+    await increment_inventory(supabase, destination, item, total_quantity)
+    await event_bus.put({
+        "type": "delivery_complete",
+        "destination": destination,
+        "item": item,
+        "quantity": total_quantity,
+    })
+    rows = await _fetch_inventory_rows()
+    await event_bus.put({"type": "inventory_updated", "rows": rows})
 
 
 async def _fetch_inventory_rows() -> list[dict[str, str | int | float]]:
@@ -77,6 +105,9 @@ async def route_emergency(
             await event_bus.put({"type": "route_dispatched", "result": result.model_dump()})
             inventory_rows = await _fetch_inventory_rows()
             await event_bus.put({"type": "inventory_updated", "rows": inventory_rows})
+            asyncio.create_task(
+                _simulate_delivery(emergency.hospital, [route], emergency.item, emergency.quantity)
+            )
             return result.model_dump()
         # Stale entry — supplier exhausted since caching; evict and recompute
         await redis.delete(cache_key)
@@ -150,6 +181,9 @@ async def route_emergency(
     await event_bus.put({"type": "route_dispatched", "result": result.model_dump()})
     inventory_rows = await _fetch_inventory_rows()
     await event_bus.put({"type": "inventory_updated", "rows": inventory_rows})
+    asyncio.create_task(
+        _simulate_delivery(emergency.hospital, routes, emergency.item, emergency.quantity)
+    )
     return result.model_dump()
 
 
