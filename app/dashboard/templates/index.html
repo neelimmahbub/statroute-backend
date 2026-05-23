@@ -8,211 +8,240 @@
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <style>
     @keyframes slideDown {
-      from { opacity: 0; transform: translateY(-6px); }
+      from { opacity: 0; transform: translateY(-5px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-    @keyframes pulseGlow {
-      0%,100% { filter: drop-shadow(0 0 3px rgba(20,184,166,.5)); }
-      50%      { filter: drop-shadow(0 0 10px rgba(20,184,166,.9)); }
+    @keyframes flashGreen {
+      0%,100% { background-color: transparent; }
+      30%     { background-color: oklch(97% 0.03 162); }
     }
-    @keyframes amberGlow {
-      0%,100% { filter: drop-shadow(0 0 3px rgba(245,158,11,.5)); }
-      50%      { filter: drop-shadow(0 0 10px rgba(245,158,11,.9)); }
+    @keyframes drawPath {
+      from { stroke-dashoffset: var(--len); }
+      to   { stroke-dashoffset: 0; }
     }
-    .incident-card { animation: slideDown .3s ease-out; }
-    .route-line-active { animation: pulseGlow 2s ease-in-out infinite; }
-    .route-line-fallback { animation: amberGlow 2s ease-in-out infinite; }
-    ::-webkit-scrollbar { width: 3px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-    .circuit-open-state { background-color: rgba(120,53,15,.12) !important; border-color: rgba(245,158,11,.35) !important; }
+    .card-enter   { animation: slideDown 220ms ease-out; }
+    .inv-flash    { animation: flashGreen 700ms ease-out; }
+    ::-webkit-scrollbar       { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 overflow-hidden" style="height:100dvh;">
 
-<!-- ── Error popup ─────────────────────────────────────────────────── -->
+<body class="bg-slate-50 text-slate-900 overflow-hidden" style="height:100dvh;">
+
+<!-- ── Error popup ──────────────────────────────────────────────────── -->
 <div id="error-popup"
-  class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm"
+  class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
   onclick="this.classList.add('hidden')">
-  <div class="max-w-md rounded-lg border border-rose-500/50 bg-slate-900 p-6 shadow-2xl shadow-rose-900/20">
-    <div class="flex items-center gap-3 mb-3">
-      <div class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse flex-shrink-0"></div>
-      <span class="text-[10px] font-bold tracking-widest uppercase text-rose-400">Access Denied</span>
+  <div class="max-w-sm w-full mx-4 bg-white rounded-xl border border-rose-200 shadow-xl p-5">
+    <div class="flex items-start gap-3">
+      <div class="w-5 h-5 rounded-full bg-rose-100 border border-rose-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <span class="text-rose-600 text-[10px] font-bold">!</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-semibold text-slate-900 mb-1">Access Denied</p>
+        <p id="error-message" class="text-sm text-slate-600 leading-relaxed"></p>
+      </div>
     </div>
-    <p id="error-message" class="text-sm text-rose-300 font-mono leading-relaxed"></p>
-    <p class="text-[10px] text-slate-600 mt-3">Click anywhere to dismiss</p>
+    <p class="text-[11px] text-slate-400 mt-3 text-right">Click anywhere to dismiss</p>
   </div>
 </div>
 
-<!-- ── Top bar ─────────────────────────────────────────────────────── -->
-<header class="h-11 border-b border-slate-800/60 flex items-center justify-between px-5 bg-slate-950/95 backdrop-blur-sm">
-  <div class="flex items-center gap-3">
-    <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-    <span class="text-xs font-bold tracking-[.18em] uppercase text-slate-200">StatRoute</span>
-    <span class="text-[11px] text-slate-600">Emergency Supply Router</span>
-  </div>
-
-  <!-- Hospital identity selector (center) -->
-  <div class="flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
-    <span class="text-[10px] text-slate-600 uppercase tracking-widest">Terminal</span>
-    <select id="hospital-selector"
-      class="rounded border border-slate-700/60 bg-slate-900 px-3 py-1 text-[11px] font-semibold text-slate-200 outline-none cursor-pointer hover:border-slate-600 focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/20 transition">
-      <option value="">⚡ Full Command</option>
-      {% for h in hospitals %}
-      <option value="{{ h }}">🏥 {{ h }}</option>
-      {% endfor %}
-    </select>
-  </div>
-
+<!-- ── Header ───────────────────────────────────────────────────────── -->
+<header class="h-12 bg-white border-b border-slate-200 flex items-center justify-between px-5">
   <div class="flex items-center gap-2.5">
-    <span class="text-[10px] text-slate-600 uppercase tracking-widest">Circuit</span>
+    <div class="w-6 h-6 rounded bg-indigo-600 flex items-center justify-center flex-shrink-0">
+      <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+    </div>
+    <span class="text-sm font-semibold text-slate-900">StatRoute</span>
+    <span class="text-xs text-slate-400 hidden sm:block">Emergency Supply Router</span>
+  </div>
+
+  <!-- Hospital terminal selector (center) -->
+  <div class="flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
+    <label class="text-[11px] text-slate-400 uppercase tracking-widest hidden md:block">Terminal</label>
+    <div class="relative">
+      <select id="hospital-selector"
+        class="appearance-none bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-7 py-1.5 text-xs font-medium text-slate-700 outline-none cursor-pointer hover:border-slate-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 transition">
+        <option value="">All Terminals</option>
+        {% for h in hospitals %}
+        <option value="{{ h }}">{{ h }}</option>
+        {% endfor %}
+      </select>
+      <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Circuit status (right) -->
+  <div class="flex items-center gap-2">
+    <span class="text-[11px] text-slate-400 uppercase tracking-widest hidden sm:block">Circuit</span>
     <span id="circuit-badge"
-      class="flex items-center gap-1.5 rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold tracking-widest text-emerald-400">
-      <span id="circuit-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+      class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+      <span id="circuit-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
       CLOSED
     </span>
   </div>
 </header>
 
-<!-- ── 3-column layout ─────────────────────────────────────────────── -->
-<main class="flex overflow-hidden" style="height:calc(100dvh - 2.75rem);">
+<!-- ── 3-column grid ────────────────────────────────────────────────── -->
+<main class="grid grid-cols-4 gap-4 p-4 overflow-hidden" style="height:calc(100dvh - 3rem);">
 
-  <!-- LEFT: Alert input + Incident feed (25%) -->
-  <aside class="w-1/4 border-r border-slate-800/60 flex flex-col bg-slate-950">
+  <!-- LEFT: Alert + Feed (col-span-1) -->
+  <aside class="col-span-1 flex flex-col gap-4 min-h-0">
 
-    <div class="border-b border-slate-800/60 p-4">
+    <!-- Alert dispatch card -->
+    <div class="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
       <div class="flex items-center gap-2 mb-3">
-        <div class="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
-        <h2 class="text-[10px] font-bold tracking-widest uppercase text-slate-500">Emergency Alert</h2>
+        <div class="w-1.5 h-1.5 rounded-full bg-rose-500 flex-shrink-0"></div>
+        <h2 class="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Dispatch Alert</h2>
       </div>
-      <form hx-post="/api/emergency" hx-trigger="submit" hx-swap="none" class="space-y-2.5" id="alert-form">
-        <textarea id="message" name="message" rows="5" required
-          class="w-full rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-[11px] text-slate-200 placeholder-slate-700 outline-none transition focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/25 resize-none"
-          placeholder="Massive pileup on I-95. St. Jude out of O-negative blood. Need 10 units immediately."></textarea>
+      <form id="alert-form" hx-post="/api/emergency" hx-trigger="submit" hx-swap="none" class="space-y-3">
+        <textarea id="message" name="message" rows="4" required
+          class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 placeholder-slate-400 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/15 focus:bg-white resize-none"
+          placeholder="St. Jude is out of O-negative blood. Need 10 units immediately."></textarea>
         <input type="hidden" name="selected_hospital" id="selected-hospital-input">
         <button type="submit"
-          class="w-full rounded border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-[10px] font-bold tracking-widest uppercase text-rose-400 transition hover:bg-rose-500/20 hover:border-rose-500/60 hover:shadow-[0_0_14px_rgba(244,63,94,.28)]">
+          class="w-full rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700 active:scale-[0.98] shadow-sm shadow-indigo-200">
           Process Alert
         </button>
       </form>
     </div>
 
-    <div class="flex-1 overflow-hidden flex flex-col p-4">
-      <div class="flex items-center justify-between mb-3">
+    <!-- Live incident feed -->
+    <div class="bg-white border border-slate-200 shadow-sm rounded-xl p-4 flex-1 flex flex-col min-h-0">
+      <div class="flex items-center justify-between mb-3 flex-shrink-0">
         <div class="flex items-center gap-2">
-          <div class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></div>
-          <h2 class="text-[10px] font-bold tracking-widest uppercase text-slate-500">Live Feed</h2>
+          <div class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse flex-shrink-0"></div>
+          <h2 class="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Live Feed</h2>
         </div>
-        <span class="text-[9px] text-slate-700 uppercase tracking-wider">SSE</span>
+        <span class="text-[10px] text-slate-400 font-mono">SSE</span>
       </div>
-      <div id="incident-feed" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1">
-        <div class="rounded border border-slate-800/50 bg-slate-900/30 p-2.5 text-[10px] text-slate-700">
-          Awaiting dispatch events…
-        </div>
+      <div id="incident-feed" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-0">
+        <p class="text-xs text-slate-400 italic">Awaiting dispatch events...</p>
       </div>
     </div>
   </aside>
 
-  <!-- CENTER: SVG Network Map (50%) -->
-  <section class="flex-1 flex flex-col bg-slate-950/40">
-    <div class="border-b border-slate-800/60 px-5 py-2.5 flex items-center justify-between">
-      <h2 class="text-[10px] font-bold tracking-widest uppercase text-slate-500">Network Topology</h2>
-      <span id="map-status" class="text-[10px] text-slate-700 uppercase tracking-widest">Idle</span>
+  <!-- CENTER: SVG Network Map (col-span-2) -->
+  <section class="col-span-2 bg-white border border-slate-200 shadow-sm rounded-xl flex flex-col min-h-0">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100 flex-shrink-0">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-900">Network Topology</h2>
+        <p class="text-[11px] text-slate-400 mt-0.5">Live supply routing graph</p>
+      </div>
+      <span id="map-status" class="text-[11px] text-slate-400 font-mono uppercase tracking-widest">Idle</span>
     </div>
 
-    <div class="flex-1 relative overflow-hidden">
-      <svg id="network-map" class="w-full h-full" viewBox="0 0 800 520" preserveAspectRatio="xMidYMid meet">
+    <div class="flex-1 relative min-h-0">
+      <svg id="network-map" class="w-full h-full" viewBox="0 0 600 380" preserveAspectRatio="xMidYMid meet">
         <defs>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M40 0 L0 0 0 40" fill="none" stroke="#0f172a" stroke-width="1"/>
+          <!-- Light grid pattern -->
+          <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+            <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#f1f5f9" stroke-width="1"/>
           </pattern>
-          <filter id="glow">
+          <!-- Indigo glow for active nodes -->
+          <filter id="node-glow">
             <feGaussianBlur stdDeviation="3" result="blur"/>
             <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
+          <!-- Rose glow for destination -->
+          <filter id="dest-glow">
+            <feGaussianBlur stdDeviation="4" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
         </defs>
+
         <rect width="100%" height="100%" fill="url(#grid)"/>
-        <g id="map-edges"></g>
-        <g id="map-route-edges"></g>
+
+        <!-- Layers -->
+        <g id="map-static-edges"></g>
+        <g id="map-active-edges"></g>
+        <g id="map-transit"></g>
         <g id="map-nodes"></g>
         <g id="map-labels"></g>
-        <text id="map-placeholder" x="400" y="260" text-anchor="middle"
-          fill="#1e293b" font-size="12" font-family="monospace" letter-spacing="4">
-          AWAITING ROUTE DATA
+
+        <text id="map-placeholder" x="300" y="190" text-anchor="middle"
+          fill="#cbd5e1" font-size="11" font-family="ui-monospace,monospace" letter-spacing="3">
+          AWAITING NETWORK DATA
         </text>
       </svg>
     </div>
 
+    <!-- Route info bar -->
     <div id="route-info-bar"
-      class="border-t border-slate-800/60 px-5 py-2 text-[10px] font-mono text-slate-700">
-      No route active
+      class="border-t border-slate-100 px-5 py-2.5 text-[11px] font-mono text-slate-400 flex-shrink-0">
+      No active route
     </div>
   </section>
 
-  <!-- RIGHT: Inventory + Chaos (25%) -->
-  <aside id="right-panel" class="w-1/4 border-l border-slate-800/60 flex flex-col bg-slate-950 transition-colors duration-700">
+  <!-- RIGHT: Inventory + Chaos (col-span-1) -->
+  <aside id="right-panel" class="col-span-1 flex flex-col gap-4 min-h-0">
 
-    <div class="flex-1 overflow-hidden flex flex-col p-4">
-      <div class="flex items-center gap-2 mb-3">
-        <div class="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-        <h2 class="text-[10px] font-bold tracking-widest uppercase text-slate-500">Supply Status</h2>
+    <!-- Supply status -->
+    <div class="bg-white border border-slate-200 shadow-sm rounded-xl p-4 flex-1 flex flex-col min-h-0">
+      <div class="flex items-center gap-2 mb-3 flex-shrink-0">
+        <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></div>
+        <h2 class="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Supply Status</h2>
       </div>
-      <div id="inventory-grid" class="flex-1 overflow-y-auto space-y-2 pr-1">
-        <div class="rounded border border-slate-800/50 bg-slate-900/30 p-2.5 text-[10px] text-slate-700">
-          Awaiting inventory…
-        </div>
+      <div id="inventory-grid" class="flex-1 overflow-y-auto space-y-2 min-h-0">
+        <p class="text-xs text-slate-400 italic">Awaiting inventory data...</p>
       </div>
     </div>
 
     {% if dev_mode %}
-    <div id="chaos-panel" class="border-t border-amber-600/25 bg-amber-950/10 p-4 transition-all duration-700">
+    <!-- Chaos controller -->
+    <div id="chaos-panel" class="bg-white border border-slate-200 shadow-sm rounded-xl p-4 flex-shrink-0 transition-colors duration-500">
       <div class="flex items-center gap-2 mb-3">
-        <div id="chaos-dot" class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-        <h2 class="text-[10px] font-bold tracking-widest uppercase text-amber-500">Chaos Controller</h2>
-        <span class="text-[9px] text-slate-700 ml-auto tracking-wider">DEV</span>
+        <div id="chaos-dot" class="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"></div>
+        <h2 class="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Chaos Controller</h2>
+        <span class="ml-auto text-[10px] text-slate-400 font-mono">DEV</span>
       </div>
 
-      <div id="circuit-warning" class="hidden mb-3 rounded border border-amber-500/40 bg-amber-500/8 px-3 py-2">
-        <p class="text-[10px] font-bold tracking-widest text-amber-400 uppercase">⚠ Circuit Breaker Open</p>
-        <p class="text-[9px] text-amber-600 mt-0.5">Falling back to static map path</p>
+      <div id="circuit-warning" class="hidden mb-3 bg-amber-50 border border-amber-200 rounded-lg p-3 animate-pulse">
+        <p class="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">Circuit Breaker Open</p>
+        <p class="text-[10px] text-amber-600 mt-0.5">Routing via static fallback path</p>
       </div>
 
       <div class="space-y-2">
         <button
-          class="group w-full rounded border border-rose-700/50 bg-rose-950/40 px-4 py-3 text-[10px] font-bold tracking-widest uppercase text-rose-400 transition hover:bg-rose-700/20 hover:border-rose-600 hover:shadow-[inset_0_0_16px_rgba(220,38,38,.12)]"
+          class="w-full rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-600 hover:text-white hover:border-rose-600 hover:shadow-sm active:scale-[0.98]"
           hx-post="/api/chaos/toggle" hx-swap="none">
-          <span class="flex items-center justify-center gap-2">
-            <span class="w-1.5 h-1.5 rounded-sm bg-rose-500 group-hover:animate-pulse inline-block"></span>
-            Trigger Critical Failure
-          </span>
+          Trigger Circuit Failure
         </button>
         <button
-          class="w-full rounded border border-emerald-700/40 bg-emerald-950/30 px-4 py-2 text-[10px] font-bold tracking-widest uppercase text-emerald-500 transition hover:bg-emerald-700/20 hover:border-emerald-600"
+          class="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-600 hover:text-white hover:border-emerald-600 hover:shadow-sm active:scale-[0.98]"
           hx-post="/api/chaos/reset" hx-swap="none">
           Reset Circuit
         </button>
       </div>
     </div>
     {% endif %}
-  </aside>
 
+  </aside>
 </main>
 
 <script>
-// ── SSE ─────────────────────────────────────────────────────────────────
-const es = new EventSource('/events');
+// ── Constants ──────────────────────────────────────────────────��─────────
+const VW = 600, VH = 380, PAD = 65, X_MAX = 8, Y_MAX = 9;
+const EDGE_THRESHOLD = 5.5;
+
+// ── State ────────────────────────────────────────────────────────────────
 const nodeReg = {};
+let lastRoutePath = null;
 
-// ── Coordinate projection ────────────────────────────────────────────────
-// Bounds: adjust to match your Supabase hospital data lat/lon range
-const GEO = { latMin: 29.5, latMax: 30.5, lonMin: -90.5, lonMax: -89.5 };
-const PAD = 70, VW = 800, VH = 520;
-
-function project(lat, lon) {
+// ── Projection ───────────────────────────────────────────────────────────
+function project(x, y) {
   return {
-    x: Math.round(PAD + ((lon - GEO.lonMin) / (GEO.lonMax - GEO.lonMin)) * (VW - PAD * 2)),
-    y: Math.round(PAD + ((GEO.latMax - lat) / (GEO.latMax - GEO.latMin)) * (VH - PAD * 2)),
+    x: Math.round(PAD + (x / X_MAX) * (VW - PAD * 2)),
+    y: Math.round(VH - PAD - (y / Y_MAX) * (VH - PAD * 2)),
   };
+}
+
+function coordDist(a, b) {
+  return Math.hypot(b.gx - a.gx, b.gy - a.gy);
 }
 
 // ── Map rendering ────────────────────────────────────────────────────────
@@ -221,142 +250,211 @@ function renderBaseMap(hospitals) {
   document.getElementById('map-placeholder').style.display = 'none';
 
   hospitals.forEach(h => {
-    if (!nodeReg[h.id]) {
-      nodeReg[h.id] = { ...h, ...project(h.lat, h.lon) };
+    if (!nodeReg[h.name ?? h.id]) {
+      const pos = project(h.x, h.y);
+      nodeReg[h.name ?? h.id] = { ...pos, gx: h.x, gy: h.y, name: h.name ?? h.id };
     }
   });
 
   const ids = Object.keys(nodeReg);
-  let edges = '', nodes = '', labels = '';
 
+  // Static edges
+  let edgeSvg = '';
   for (let i = 0; i < ids.length; i++) {
     for (let j = i + 1; j < ids.length; j++) {
       const a = nodeReg[ids[i]], b = nodeReg[ids[j]];
-      if (Math.hypot(a.x - b.x, a.y - b.y) < 200) {
-        edges += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#0f172a" stroke-width="1.5"/>`;
+      if (coordDist(a, b) <= EDGE_THRESHOLD) {
+        edgeSvg += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"
+          stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round"/>`;
       }
     }
   }
+  document.getElementById('map-static-edges').innerHTML = edgeSvg;
 
+  // Nodes + labels
+  let nodeSvg = '', labelSvg = '';
   ids.forEach(id => {
     const n = nodeReg[id];
-    nodes += `<circle id="node-${id}" cx="${n.x}" cy="${n.y}" r="5" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>`;
-    labels += `<text id="label-${id}" x="${n.x}" y="${n.y + 17}" text-anchor="middle" fill="#334155" font-size="9" font-family="monospace">${n.name || id}</text>`;
+    nodeSvg += `<circle id="node-${id.replace(/\s/g,'-')}" cx="${n.x}" cy="${n.y}" r="6"
+      fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>`;
+    labelSvg += `<text id="label-${id.replace(/\s/g,'-')}" x="${n.x}" y="${n.y + 18}"
+      text-anchor="middle" fill="#94a3b8" font-size="9" font-family="ui-monospace,monospace">${n.name}</text>`;
   });
-
-  document.getElementById('map-edges').innerHTML = edges;
-  document.getElementById('map-nodes').innerHTML = nodes;
-  document.getElementById('map-labels').innerHTML = labels;
+  document.getElementById('map-nodes').innerHTML = nodeSvg;
+  document.getElementById('map-labels').innerHTML = labelSvg;
 }
 
+// Animate route path
 function animateRoute(path, fallback) {
   if (!path?.length) return;
-  const routeEl = document.getElementById('map-route-edges');
-  routeEl.innerHTML = '';
+  lastRoutePath = path;
+
+  const activeEdges = document.getElementById('map-active-edges');
+  activeEdges.innerHTML = '';
 
   // Reset all nodes
   Object.keys(nodeReg).forEach(id => {
-    const el = document.getElementById(`node-${id}`);
-    const lb = document.getElementById(`label-${id}`);
-    if (el) { el.setAttribute('fill', '#1e293b'); el.setAttribute('stroke', '#334155'); el.setAttribute('r', '5'); el.style.filter = ''; }
-    if (lb) lb.setAttribute('fill', '#334155');
+    const safeId = id.replace(/\s/g, '-');
+    const el = document.getElementById(`node-${safeId}`);
+    const lb = document.getElementById(`label-${safeId}`);
+    if (el) { el.setAttribute('fill', '#f1f5f9'); el.setAttribute('stroke', '#94a3b8'); el.setAttribute('r', '6'); el.style.filter = ''; }
+    if (lb) lb.setAttribute('fill', '#94a3b8');
   });
 
-  const stroke = fallback ? '#f59e0b' : '#14b8a6';
-  const cls    = fallback ? 'route-line-fallback' : 'route-line-active';
+  const stroke = fallback ? '#f59e0b' : '#6366f1';
+  const nodeColor = fallback ? '#f59e0b' : '#6366f1';
+  const glowFilter = fallback ? '' : 'url(#node-glow)';
 
-  // Draw edges with staggered animation
+  // Draw active edges with staggered dashoffset animation
   path.forEach((id, i) => {
     if (i === path.length - 1) return;
     const a = nodeReg[id], b = nodeReg[path[i + 1]];
     if (!a || !b) return;
-
     const len = Math.hypot(b.x - a.x, b.y - a.y);
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
     line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
-    line.setAttribute('stroke', stroke); line.setAttribute('stroke-width', '3');
-    line.setAttribute('stroke-dasharray', len); line.setAttribute('stroke-dashoffset', len);
-    line.setAttribute('filter', 'url(#glow)');
-    line.className.baseVal = cls;
-    line.style.transition = `stroke-dashoffset .7s ease-out ${i * .55}s`;
-    routeEl.appendChild(line);
+    line.setAttribute('stroke', stroke); line.setAttribute('stroke-width', '2.5');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('stroke-dasharray', len);
+    line.setAttribute('stroke-dashoffset', len);
+    line.style.transition = `stroke-dashoffset 0.65s cubic-bezier(0.16,1,0.3,1) ${i * 0.5}s`;
+    activeEdges.appendChild(line);
     requestAnimationFrame(() => requestAnimationFrame(() => line.setAttribute('stroke-dashoffset', '0')));
   });
 
-  // Animate nodes
+  // Highlight nodes along path
   path.forEach((id, i) => {
-    const el = document.getElementById(`node-${id}`);
-    const lb = document.getElementById(`label-${id}`);
+    const safeId = id.replace(/\s/g, '-');
+    const el = document.getElementById(`node-${safeId}`);
+    const lb = document.getElementById(`label-${safeId}`);
     if (!el) return;
     setTimeout(() => {
       const isDest = i === path.length - 1;
-      const isSrc  = i === 0;
-      el.setAttribute('fill',   isDest ? '#f43f5e' : isSrc ? '#f59e0b' : stroke);
-      el.setAttribute('stroke', stroke);
-      el.setAttribute('stroke-width', '2');
+      el.setAttribute('fill', isDest ? '#f43f5e' : nodeColor);
+      el.setAttribute('stroke', isDest ? '#e11d48' : stroke);
       el.setAttribute('r', isDest ? '8' : '7');
-      el.style.filter = `drop-shadow(0 0 6px ${stroke}aa)`;
-      if (lb) lb.setAttribute('fill', stroke);
-    }, i * 550);
+      el.style.filter = isDest ? 'url(#dest-glow)' : glowFilter;
+      if (lb) { lb.setAttribute('fill', isDest ? '#e11d48' : stroke); lb.setAttribute('font-weight', '600'); }
+    }, i * 500);
   });
 
-  const statusEl = document.getElementById('map-status');
-  statusEl.textContent = fallback ? 'FALLBACK ACTIVE' : 'ROUTE LIVE';
-  statusEl.className = fallback
-    ? 'text-[10px] text-amber-400 uppercase tracking-widest animate-pulse'
-    : 'text-[10px] text-teal-400 uppercase tracking-widest animate-pulse';
+  document.getElementById('map-status').textContent = fallback ? 'FALLBACK' : 'ROUTING';
+  document.getElementById('map-status').className = fallback
+    ? 'text-[11px] text-amber-600 font-mono uppercase tracking-widest animate-pulse'
+    : 'text-[11px] text-indigo-600 font-mono uppercase tracking-widest animate-pulse';
 }
 
-// ── Incident feed ────────────────────────────────────────────────────────
+// Animate transit dot along path using animateMotion
+function animateTransitDot(path, etaSeconds) {
+  if (!path?.length || path.length < 2) return;
+  const coords = path.map(id => nodeReg[id]).filter(Boolean);
+  if (coords.length < 2) return;
+
+  // Build SVG path string for motion
+  const d = coords.map((n, i) => `${i === 0 ? 'M' : 'L'} ${n.x},${n.y}`).join(' ');
+  const uid = Date.now();
+
+  // Remove previous transit dot
+  document.getElementById('transit-dot-group')?.remove();
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const xlinkNs = 'http://www.w3.org/1999/xlink';
+  const g = document.createElementNS(ns, 'g');
+  g.id = 'transit-dot-group';
+
+  // Motion path (invisible)
+  const motionPath = document.createElementNS(ns, 'path');
+  motionPath.id = `mpath-${uid}`;
+  motionPath.setAttribute('d', d);
+  motionPath.setAttribute('fill', 'none');
+  g.appendChild(motionPath);
+
+  // Outer glow ring
+  const glowRing = document.createElementNS(ns, 'circle');
+  glowRing.setAttribute('r', '10');
+  glowRing.setAttribute('fill', 'none');
+  glowRing.setAttribute('stroke', '#6366f1');
+  glowRing.setAttribute('stroke-width', '1.5');
+  glowRing.setAttribute('opacity', '0.35');
+  const glowAnim = document.createElementNS(ns, 'animateMotion');
+  glowAnim.setAttribute('dur', `${etaSeconds}s`);
+  glowAnim.setAttribute('repeatCount', '1');
+  glowAnim.setAttribute('fill', 'freeze');
+  const glowMpath = document.createElementNS(ns, 'mpath');
+  glowMpath.setAttributeNS(xlinkNs, 'href', `#mpath-${uid}`);
+  glowAnim.appendChild(glowMpath);
+  glowRing.appendChild(glowAnim);
+  g.appendChild(glowRing);
+
+  // Traveling dot
+  const dot = document.createElementNS(ns, 'circle');
+  dot.setAttribute('r', '5');
+  dot.setAttribute('fill', '#4f46e5');
+  dot.style.filter = 'drop-shadow(0 0 4px rgba(79,70,229,0.7))';
+  const dotAnim = document.createElementNS(ns, 'animateMotion');
+  dotAnim.setAttribute('dur', `${etaSeconds}s`);
+  dotAnim.setAttribute('repeatCount', '1');
+  dotAnim.setAttribute('fill', 'freeze');
+  const dotMpath = document.createElementNS(ns, 'mpath');
+  dotMpath.setAttributeNS(xlinkNs, 'href', `#mpath-${uid}`);
+  dotAnim.appendChild(dotMpath);
+  dot.appendChild(dotAnim);
+  g.appendChild(dot);
+
+  document.getElementById('map-transit').appendChild(g);
+}
+
+// ── Incident feed cards ──────────────────────────────────────────────────
+function clearPlaceholder(feedEl) {
+  const p = feedEl.querySelector('p.italic');
+  if (p) p.remove();
+}
+
 function addIncidentCard(result, fallback) {
   const feed = document.getElementById('incident-feed');
-  const placeholder = feed.querySelector('.text-slate-700');
-  if (placeholder) placeholder.remove();
-
-  const supplier = result.routes?.[0]?.supplier_id ?? result.supplier_name ?? 'unknown';
-  const path     = result.routes?.[0]?.path;
-  const border   = fallback ? 'border-amber-500/25' : 'border-teal-500/25';
-  const dot      = fallback ? 'bg-amber-400' : 'bg-teal-400';
-  const tag      = fallback
-    ? '<span class="ml-auto text-amber-400 text-[9px] font-bold tracking-widest">FALLBACK</span>'
-    : '<span class="ml-auto text-teal-400 text-[9px] font-bold tracking-widest">LIVE</span>';
+  clearPlaceholder(feed);
+  const supplier = result.routes?.[0]?.supplier_id ?? 'unknown';
+  const path = result.routes?.[0]?.path;
+  const borderCls = fallback ? 'border-amber-200 bg-amber-50' : 'border-indigo-100 bg-white';
+  const dotCls   = fallback ? 'bg-amber-400' : 'bg-indigo-500';
+  const tagCls   = fallback ? 'text-amber-600' : 'text-indigo-600';
+  const tag      = fallback ? 'FALLBACK' : 'DISPATCHED';
 
   const card = document.createElement('div');
-  card.className = `incident-card rounded border ${border} bg-slate-900/50 p-2.5 text-[11px] flex-shrink-0`;
+  card.className = `card-enter rounded-lg border ${borderCls} p-3 flex-shrink-0`;
   card.innerHTML = `
     <div class="flex items-center gap-2 mb-1.5">
-      <span class="w-1.5 h-1.5 rounded-full ${dot} flex-shrink-0"></span>
-      <span class="font-mono text-slate-500 text-[10px]">${new Date().toLocaleTimeString()}</span>
-      ${tag}
+      <span class="w-1.5 h-1.5 rounded-full ${dotCls} flex-shrink-0"></span>
+      <span class="text-[10px] font-mono text-slate-400">${new Date().toLocaleTimeString()}</span>
+      <span class="ml-auto text-[10px] font-semibold ${tagCls} uppercase tracking-wider">${tag}</span>
     </div>
-    <p class="text-slate-400 text-[11px]">Supplier: <span class="text-slate-200 font-medium">${supplier}</span></p>
-    ${path ? `<p class="text-slate-700 text-[10px] mt-1 font-mono truncate">${path.join(' → ')}</p>` : ''}`;
+    <p class="text-xs text-slate-700">Supplier: <span class="font-semibold text-slate-900">${supplier}</span></p>
+    ${path ? `<p class="text-[10px] font-mono text-slate-400 mt-1 truncate">${path.join(' → ')}</p>` : ''}`;
   feed.prepend(card);
 }
 
 function addTransitCard(data) {
   const feed = document.getElementById('incident-feed');
-  const placeholder = feed.querySelector('.text-slate-700');
-  if (placeholder) placeholder.remove();
-
+  clearPlaceholder(feed);
   const uid = Date.now();
   const eta = data.eta_seconds ?? 5;
+
   const card = document.createElement('div');
-  card.className = 'incident-card rounded border border-amber-500/25 bg-amber-950/15 p-2.5 flex-shrink-0';
+  card.className = 'card-enter rounded-lg border border-amber-200 bg-amber-50 p-3 flex-shrink-0';
   card.innerHTML = `
     <div class="flex items-center gap-2 mb-1.5">
       <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span>
-      <span class="font-mono text-slate-500 text-[10px]">${new Date().toLocaleTimeString()}</span>
-      <span class="ml-auto text-amber-400 text-[9px] font-bold tracking-widest">IN TRANSIT</span>
+      <span class="text-[10px] font-mono text-slate-400">${new Date().toLocaleTimeString()}</span>
+      <span class="ml-auto text-[10px] font-semibold text-amber-700 uppercase tracking-wider">IN TRANSIT</span>
     </div>
-    <p class="text-amber-300 text-[11px]">${data.supplier} → <span class="font-semibold text-amber-200">${data.destination}</span></p>
-    <p class="text-slate-600 text-[10px] mt-0.5">${data.quantity} units · ${data.item}</p>
+    <p class="text-xs text-slate-700">${data.supplier} <span class="text-slate-400 mx-1">→</span> <span class="font-semibold text-slate-900">${data.destination}</span></p>
+    <p class="text-[10px] text-slate-500 mt-0.5">${data.quantity} units · ${data.item}</p>
     <div class="flex items-center gap-2 mt-2">
-      <div class="flex-1 h-0.5 rounded-full bg-slate-800 overflow-hidden">
+      <div class="flex-1 h-1 rounded-full bg-amber-200 overflow-hidden">
         <div id="bar-${uid}" class="h-full bg-amber-500 rounded-full" style="width:0%;transition:width ${eta}s linear"></div>
       </div>
-      <span id="eta-${uid}" class="text-[10px] text-amber-500 font-mono w-6 text-right">${eta}s</span>
+      <span id="eta-${uid}" class="text-[10px] font-mono text-amber-700 w-5 text-right">${eta}s</span>
     </div>`;
   feed.prepend(card);
 
@@ -375,15 +473,15 @@ function addTransitCard(data) {
 function addDeliveryCard(data) {
   const feed = document.getElementById('incident-feed');
   const card = document.createElement('div');
-  card.className = 'incident-card rounded border border-emerald-500/30 bg-emerald-950/15 p-2.5 flex-shrink-0';
+  card.className = 'card-enter rounded-lg border border-emerald-200 bg-emerald-50 p-3 flex-shrink-0';
   card.innerHTML = `
     <div class="flex items-center gap-2 mb-1.5">
-      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0"></span>
-      <span class="font-mono text-slate-500 text-[10px]">${new Date().toLocaleTimeString()}</span>
-      <span class="ml-auto text-emerald-400 text-[9px] font-bold tracking-widest">DELIVERED</span>
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
+      <span class="text-[10px] font-mono text-slate-400">${new Date().toLocaleTimeString()}</span>
+      <span class="ml-auto text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">DELIVERED</span>
     </div>
-    <p class="text-emerald-300 text-[11px] font-semibold">${data.destination} received ${data.quantity} units</p>
-    <p class="text-slate-600 text-[10px] mt-0.5">${data.item}</p>`;
+    <p class="text-sm font-semibold text-emerald-800">${data.destination} received ${data.quantity} units</p>
+    <p class="text-[10px] text-slate-500 mt-0.5">${data.item}</p>`;
   feed.prepend(card);
 }
 
@@ -391,125 +489,159 @@ function addDeliveryCard(data) {
 function renderInventory(items) {
   const grid = document.getElementById('inventory-grid');
   if (!items?.length) return;
-  grid.innerHTML = items.map(item => {
-    const qty = item.quantity ?? 0;
-    const max = item.max_quantity ?? 100;
-    const pct = Math.min(100, Math.round((qty / max) * 100));
-    const bar  = qty === 0 ? 'bg-rose-500' : qty < max * .2 ? 'bg-amber-500' : 'bg-emerald-500';
-    const txt  = qty === 0 ? 'text-rose-400' : qty < max * .2 ? 'text-amber-400' : 'text-emerald-400';
-    return `
-      <div class="rounded border border-slate-800/50 bg-slate-900/40 p-2.5">
-        <div class="flex items-center justify-between mb-1">
-          <span class="text-[11px] text-slate-300 font-medium truncate">${item.hospital_name ?? item.hospital_id ?? item.name}</span>
-          <span class="text-[10px] ${txt} font-bold ml-2 flex-shrink-0">${qty}</span>
-        </div>
-        <p class="text-[10px] text-slate-600 mb-1.5 truncate">${item.item_name ?? item.item}</p>
-        <div class="h-0.5 rounded-full bg-slate-800 overflow-hidden">
-          <div class="h-full ${bar} rounded-full transition-all duration-700" style="width:${pct}%"></div>
-        </div>
-      </div>`;
-  }).join('');
+
+  // Group by hospital
+  const byHospital = {};
+  items.forEach(item => {
+    const name = item.hospital_name ?? item.name ?? item.hospital_id ?? 'Unknown';
+    if (!byHospital[name]) byHospital[name] = [];
+    byHospital[name].push(item);
+  });
+
+  grid.innerHTML = Object.entries(byHospital).map(([hospital, rows]) => `
+    <div class="rounded-lg border border-slate-100 bg-slate-50 p-2.5 inv-flash" style="animation:none">
+      <p class="text-[11px] font-semibold text-slate-700 mb-2">${hospital}</p>
+      <div class="space-y-1.5">
+        ${rows.map(r => {
+          const qty = r.quantity ?? 0;
+          const max = r.max_quantity ?? (qty > 0 ? qty * 2 : 100);
+          const pct = max > 0 ? Math.min(100, Math.round((qty / max) * 100)) : 0;
+          const barColor = qty === 0 ? 'bg-rose-400' : pct < 20 ? 'bg-amber-400' : 'bg-emerald-500';
+          const textColor = qty === 0 ? 'text-rose-600' : pct < 20 ? 'text-amber-600' : 'text-emerald-700';
+          const label = r.item_name ?? r.item ?? 'Unknown';
+          return `
+            <div>
+              <div class="flex justify-between items-baseline mb-0.5">
+                <span class="text-[10px] text-slate-500 truncate">${label}</span>
+                <span class="text-[10px] font-semibold font-mono ${textColor} ml-2 flex-shrink-0">${qty}</span>
+              </div>
+              <div class="h-1 rounded-full bg-slate-200 overflow-hidden">
+                <div class="${barColor} h-full rounded-full transition-all duration-700" style="width:${pct}%"></div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`
+  ).join('');
+
+  // Flash each card
+  grid.querySelectorAll('.inv-flash').forEach(el => {
+    el.style.animation = '';
+    void el.offsetWidth;
+    el.style.animation = 'flashGreen 700ms ease-out';
+  });
 }
 
-// ── Circuit badge ────────────────────────────────────────────────────────
+// ── Circuit state ────────────────────────────────────────────────────────���
 function setCircuit(state) {
   const badge = document.getElementById('circuit-badge');
   const dot   = document.getElementById('circuit-dot');
   const warn  = document.getElementById('circuit-warning');
-  const panel = document.getElementById('right-panel');
+  const panel = document.getElementById('chaos-panel');
+
   if (state === 'OPEN') {
-    badge.className = 'flex items-center gap-1.5 rounded-sm border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold tracking-widest text-amber-400 animate-pulse';
+    badge.className = 'inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 animate-pulse';
     dot.className   = 'w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse';
     badge.lastChild.textContent = ' OPEN';
     warn?.classList.remove('hidden');
-    panel?.classList.add('circuit-open-state');
+    panel?.classList.add('bg-amber-50', '!border-amber-200');
   } else {
-    badge.className = 'flex items-center gap-1.5 rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold tracking-widest text-emerald-400';
-    dot.className   = 'w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block';
+    badge.className = 'inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700';
+    dot.className   = 'w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block';
     badge.lastChild.textContent = ' CLOSED';
     warn?.classList.add('hidden');
-    panel?.classList.remove('circuit-open-state');
+    panel?.classList.remove('bg-amber-50', '!border-amber-200');
   }
 }
 
-// ── Event dispatcher ─────────────────────────────────────────────────────
+// ── Event dispatcher ──────────────────────────────────────────────────────
 function dispatch(data) {
   switch (data.type) {
     case 'route_dispatched': {
       const result = data.result ?? data;
       const fallback = !!result.fallback;
       addIncidentCard(result, fallback);
-      if (result.hospitals) renderBaseMap(result.hospitals);
       const path = result.routes?.[0]?.path;
       if (path) animateRoute(path, fallback);
       const dist = result.routes?.[0]?.distance;
-      const bar  = document.getElementById('route-info-bar');
+      const bar = document.getElementById('route-info-bar');
       bar.textContent = fallback
-        ? '⚠  FALLBACK — Static map path active'
-        : `Route: ${path?.join(' → ')} | Distance: ${dist?.toFixed(2) ?? '—'} units`;
-      bar.className = `border-t border-slate-800/60 px-5 py-2 text-[10px] font-mono ${fallback ? 'text-amber-400' : 'text-teal-400'}`;
+        ? 'FALLBACK — Static map path active'
+        : `${path?.join(' → ')} · ${dist?.toFixed(1) ?? '—'} units`;
+      bar.className = `border-t border-slate-100 px-5 py-2.5 text-[11px] font-mono flex-shrink-0 ${fallback ? 'text-amber-600' : 'text-indigo-600'}`;
       break;
     }
+    case 'inventory_updated':
+      renderInventory(data.inventory ?? data.items ?? data.rows ?? []);
+      // Register nodes from inventory data for SVG map
+      if (data.rows?.length) {
+        const hospitals = data.rows.reduce((acc, r) => {
+          if (!acc.find(h => h.name === r.name)) acc.push({ name: r.name, x: r.x, y: r.y });
+          return acc;
+        }, []);
+        renderBaseMap(hospitals);
+      }
+      break;
+    case 'in_transit':
+      addTransitCard(data);
+      if (lastRoutePath) animateTransitDot(lastRoutePath, data.eta_seconds ?? 5);
+      break;
+    case 'delivery_complete':
+      addDeliveryCard(data);
+      document.getElementById('map-status').textContent = 'DELIVERED';
+      document.getElementById('map-status').className = 'text-[11px] text-emerald-600 font-mono uppercase tracking-widest';
+      break;
     case 'circuit_open':   setCircuit('OPEN');   break;
     case 'circuit_closed': setCircuit('CLOSED'); break;
-    case 'inventory_updated': renderInventory(data.inventory ?? data.items ?? data.rows ?? []); break;
-    case 'in_transit':        addTransitCard(data); break;
-    case 'delivery_complete': addDeliveryCard(data); break;
     case 'parse_error': {
+      const feed = document.getElementById('incident-feed');
       const c = document.createElement('div');
-      c.className = 'incident-card rounded border border-rose-500/20 bg-rose-950/20 p-2.5 text-[10px] text-rose-400 flex-shrink-0';
+      c.className = 'card-enter rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 flex-shrink-0';
       c.textContent = `Parse error: ${data.detail ?? 'unknown'}`;
-      document.getElementById('incident-feed').prepend(c);
+      feed.prepend(c);
       break;
     }
   }
 }
 
-es.onmessage = e => { try { dispatch(JSON.parse(e.data)); } catch (_) {} };
-['route_dispatched','circuit_open','circuit_closed','inventory_updated','parse_error'].forEach(t => {
-  es.addEventListener(t, e => { try { dispatch({ type: t, ...JSON.parse(e.data) }); } catch (_) {} });
+// ── SSE ───────────────────────────────────────────────────────────────────
+const es = new EventSource('/events');
+es.onmessage = e => { try { dispatch(JSON.parse(e.data)); } catch(_) {} };
+['route_dispatched','circuit_open','circuit_closed','inventory_updated',
+ 'in_transit','delivery_complete','parse_error'].forEach(t => {
+  es.addEventListener(t, e => { try { dispatch({ type: t, ...JSON.parse(e.data) }); } catch(_) {} });
 });
 es.onerror = () => {
+  const feed = document.getElementById('incident-feed');
   const c = document.createElement('div');
-  c.className = 'incident-card rounded border border-rose-500/20 bg-rose-950/20 p-2 text-[10px] text-rose-500 flex-shrink-0';
-  c.textContent = 'SSE lost — reconnecting…';
-  document.getElementById('incident-feed').prepend(c);
+  c.className = 'card-enter rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-600 flex-shrink-0';
+  c.textContent = 'SSE connection lost — reconnecting...';
+  feed.prepend(c);
 };
 
-// ── Hospital selector ────────────────────────────────────────────────────
-const selector = document.getElementById('hospital-selector');
-const hiddenInput = document.getElementById('selected-hospital-input');
-
+// ── Hospital selector ─────────────────────────────────────────────────────
+const selector  = document.getElementById('hospital-selector');
+const hiddenInp = document.getElementById('selected-hospital-input');
 selector.addEventListener('change', () => {
-  hiddenInput.value = selector.value;
-  const label = selector.options[selector.selectedIndex].text;
-  const ta = document.getElementById('message');
-  ta.placeholder = selector.value
-    ? `${selector.value} is requesting…`
-    : 'Massive pileup on I-95. St. Jude out of O-negative blood. Need 10 units immediately.';
+  hiddenInp.value = selector.value;
+  document.getElementById('message').placeholder = selector.value
+    ? `${selector.value} is requesting...`
+    : 'St. Jude is out of O-negative blood. Need 10 units immediately.';
 });
 
-// ── Error popup ──────────────────────────────────────────────────────────
-function showError(msg, duration = 4000) {
+// ── Error popup ───────────────────────────────────────────────────────────
+function showError(msg, duration = 4500) {
   document.getElementById('error-message').textContent = msg;
   const popup = document.getElementById('error-popup');
   popup.classList.remove('hidden');
   clearTimeout(popup._timer);
   popup._timer = setTimeout(() => popup.classList.add('hidden'), duration);
 }
-
-document.addEventListener('htmx:responseError', (e) => {
-  try {
-    const detail = JSON.parse(e.detail.xhr.responseText)?.detail;
-    showError(detail || 'Request failed — check the alert and try again.');
-  } catch {
-    showError('Request failed — check the alert and try again.');
-  }
+document.addEventListener('htmx:responseError', e => {
+  try { showError(JSON.parse(e.detail.xhr.responseText)?.detail || 'Request failed.'); }
+  catch(_) { showError('Request failed. Check the alert and try again.'); }
 });
-
-document.addEventListener('htmx:sendError', () => {
-  showError('Cannot reach StatRoute server. Check your connection.');
-});
+document.addEventListener('htmx:sendError', () => showError('Cannot reach StatRoute server.'));
 </script>
 </body>
 </html>
