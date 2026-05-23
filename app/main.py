@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from app.config import get_settings
 from app.bus import event_bus
 from app.database import supabase
-from app.inventory.models import load_initial_map_graph
+from app.inventory.models import load_initial_map_graph, reset_seed_data
 from app.routing.router import router as routing_router
 from app.inventory.router import router as inventory_router
 from app.dashboard.views import router as dashboard_router
@@ -23,6 +23,8 @@ if settings.sentry_dsn:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    await reset_seed_data(supabase)
+    await app.state.redis.flushdb()
     graph, hospital_node_map = await load_initial_map_graph(supabase)
     app.state.static_network_graph = graph
     app.state.hospital_node_map = hospital_node_map

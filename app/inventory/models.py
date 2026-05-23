@@ -5,6 +5,30 @@ from supabase import Client
 
 from app.agent.schemas import SupplierNode
 
+SEED_ROWS: list[dict[str, str | int | float]] = [
+    {"name": "St. Jude",          "item": "O-negative blood", "quantity": 0,  "x": 0.0, "y": 0.0},
+    {"name": "City General",       "item": "O-negative blood", "quantity": 50, "x": 3.0, "y": 4.0},
+    {"name": "Metro Health",       "item": "O-negative blood", "quantity": 30, "x": 7.0, "y": 1.0},
+    {"name": "Riverside Medical",  "item": "O-negative blood", "quantity": 20, "x": 2.0, "y": 8.0},
+    {"name": "Downtown ER",        "item": "O-negative blood", "quantity": 45, "x": 5.0, "y": 5.0},
+    {"name": "St. Jude",          "item": "epinephrine",       "quantity": 10, "x": 0.0, "y": 0.0},
+    {"name": "City General",       "item": "epinephrine",       "quantity": 0,  "x": 3.0, "y": 4.0},
+    {"name": "Metro Health",       "item": "epinephrine",       "quantity": 25, "x": 7.0, "y": 1.0},
+    {"name": "Riverside Medical",  "item": "epinephrine",       "quantity": 15, "x": 2.0, "y": 8.0},
+    {"name": "Downtown ER",        "item": "epinephrine",       "quantity": 30, "x": 5.0, "y": 5.0},
+]
+
+
+async def reset_seed_data(supabase: Client) -> int:
+    """DESTRUCTIVE — wipes hospital_inventory and re-inserts seed rows."""
+    await asyncio.to_thread(
+        lambda: supabase.table("hospital_inventory").delete().neq("name", "").execute()
+    )
+    await asyncio.to_thread(
+        lambda: supabase.table("hospital_inventory").insert(SEED_ROWS).execute()
+    )
+    return len(SEED_ROWS)
+
 
 async def find_supplier(supabase: Client, item: str) -> list[SupplierNode]:
     """
