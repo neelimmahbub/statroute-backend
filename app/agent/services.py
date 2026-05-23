@@ -24,7 +24,7 @@ _RESPONSE_SCHEMA = {
 }
 
 _model = genai.GenerativeModel(
-    "gemini-2.0-flash-lite",
+    "gemini-3.1-flash-lite",
     generation_config={
         "response_mime_type": "application/json",
         "response_schema": _RESPONSE_SCHEMA,
