@@ -40,7 +40,7 @@ class SupplierRoute(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     supplier_id: str
-    quantity_allocated: int = Field(gt=0)
+    quantity_allocated: int = Field(ge=0)
     path: list[str]
     distance: float = Field(ge=0)
 
@@ -51,5 +51,5 @@ class RouteResult(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     routes: list[SupplierRoute]
-    total_quantity: int = Field(gt=0)
+    total_quantity: int = Field(ge=0)
     partial: bool
