@@ -30,6 +30,20 @@
 </head>
 <body class="bg-slate-950 text-slate-100 overflow-hidden" style="height:100dvh;">
 
+<!-- ── Error popup ─────────────────────────────────────────────────── -->
+<div id="error-popup"
+  class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm"
+  onclick="this.classList.add('hidden')">
+  <div class="max-w-md rounded-lg border border-rose-500/50 bg-slate-900 p-6 shadow-2xl shadow-rose-900/20">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse flex-shrink-0"></div>
+      <span class="text-[10px] font-bold tracking-widest uppercase text-rose-400">Access Denied</span>
+    </div>
+    <p id="error-message" class="text-sm text-rose-300 font-mono leading-relaxed"></p>
+    <p class="text-[10px] text-slate-600 mt-3">Click anywhere to dismiss</p>
+  </div>
+</div>
+
 <!-- ── Top bar ─────────────────────────────────────────────────────── -->
 <header class="h-11 border-b border-slate-800/60 flex items-center justify-between px-5 bg-slate-950/95 backdrop-blur-sm">
   <div class="flex items-center gap-3">
@@ -37,6 +51,19 @@
     <span class="text-xs font-bold tracking-[.18em] uppercase text-slate-200">StatRoute</span>
     <span class="text-[11px] text-slate-600">Emergency Supply Router</span>
   </div>
+
+  <!-- Hospital identity selector (center) -->
+  <div class="flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
+    <span class="text-[10px] text-slate-600 uppercase tracking-widest">Terminal</span>
+    <select id="hospital-selector"
+      class="rounded border border-slate-700/60 bg-slate-900 px-3 py-1 text-[11px] font-semibold text-slate-200 outline-none cursor-pointer hover:border-slate-600 focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/20 transition">
+      <option value="">⚡ Full Command</option>
+      {% for h in hospitals %}
+      <option value="{{ h }}">🏥 {{ h }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
   <div class="flex items-center gap-2.5">
     <span class="text-[10px] text-slate-600 uppercase tracking-widest">Circuit</span>
     <span id="circuit-badge"
@@ -58,10 +85,11 @@
         <div class="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
         <h2 class="text-[10px] font-bold tracking-widest uppercase text-slate-500">Emergency Alert</h2>
       </div>
-      <form hx-post="/api/emergency" hx-trigger="submit" hx-swap="none" class="space-y-2.5">
+      <form hx-post="/api/emergency" hx-trigger="submit" hx-swap="none" class="space-y-2.5" id="alert-form">
         <textarea id="message" name="message" rows="5" required
           class="w-full rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-[11px] text-slate-200 placeholder-slate-700 outline-none transition focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/25 resize-none"
           placeholder="Massive pileup on I-95. St. Jude out of O-negative blood. Need 10 units immediately."></textarea>
+        <input type="hidden" name="selected_hospital" id="selected-hospital-input">
         <button type="submit"
           class="w-full rounded border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-[10px] font-bold tracking-widest uppercase text-rose-400 transition hover:bg-rose-500/20 hover:border-rose-500/60 hover:shadow-[0_0_14px_rgba(244,63,94,.28)]">
           Process Alert
@@ -447,6 +475,41 @@ es.onerror = () => {
   c.textContent = 'SSE lost — reconnecting…';
   document.getElementById('incident-feed').prepend(c);
 };
+
+// ── Hospital selector ────────────────────────────────────────────────────
+const selector = document.getElementById('hospital-selector');
+const hiddenInput = document.getElementById('selected-hospital-input');
+
+selector.addEventListener('change', () => {
+  hiddenInput.value = selector.value;
+  const label = selector.options[selector.selectedIndex].text;
+  const ta = document.getElementById('message');
+  ta.placeholder = selector.value
+    ? `${selector.value} is requesting…`
+    : 'Massive pileup on I-95. St. Jude out of O-negative blood. Need 10 units immediately.';
+});
+
+// ── Error popup ──────────────────────────────────────────────────────────
+function showError(msg, duration = 4000) {
+  document.getElementById('error-message').textContent = msg;
+  const popup = document.getElementById('error-popup');
+  popup.classList.remove('hidden');
+  clearTimeout(popup._timer);
+  popup._timer = setTimeout(() => popup.classList.add('hidden'), duration);
+}
+
+document.addEventListener('htmx:responseError', (e) => {
+  try {
+    const detail = JSON.parse(e.detail.xhr.responseText)?.detail;
+    showError(detail || 'Request failed — check the alert and try again.');
+  } catch {
+    showError('Request failed — check the alert and try again.');
+  }
+});
+
+document.addEventListener('htmx:sendError', () => {
+  showError('Cannot reach StatRoute server. Check your connection.');
+});
 </script>
 </body>
 </html>
