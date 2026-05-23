@@ -13,7 +13,9 @@ templates = Jinja2Templates(
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, dev: int = 0) -> HTMLResponse:
     """dev=1 activates chaos control panel in the template."""
+    hospital_node_map = getattr(request.app.state, "hospital_node_map", {})
+    hospitals = sorted(hospital_node_map.keys())
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "dev_mode": bool(dev)},
+        {"request": request, "dev_mode": bool(dev), "hospitals": hospitals},
     )

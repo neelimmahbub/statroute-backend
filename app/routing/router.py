@@ -16,6 +16,7 @@ from app.database import supabase
 
 CACHE_TTL_SECONDS = 300
 DELIVERY_SIM_SECONDS = 5
+MAX_REQUEST_QUANTITY = 50
 
 router = APIRouter()
 
@@ -63,6 +64,7 @@ async def route_emergency(
     request: Request,
     body: EmergencyInput | None = None,
     message: str | None = Form(default=None),
+    selected_hospital: str | None = Form(default=None),
 ) -> dict:
     redis = request.app.state.redis
     graph = request.app.state.static_network_graph
@@ -77,6 +79,20 @@ async def route_emergency(
     emergency = await parse_emergency(
         emergency_input.message, list(hospital_node_map.keys())
     )
+
+    if selected_hospital and emergency.hospital.lower() != selected_hospital.lower():
+        raise HTTPException(
+            403,
+            f"Access denied: you are logged in as {selected_hospital!r} but this request "
+            f"is for {emergency.hospital!r}. Switch to Full Command or re-submit from the correct terminal.",
+        )
+
+    if emergency.quantity > MAX_REQUEST_QUANTITY:
+        raise HTTPException(
+            422,
+            f"Request exceeds single-dispatch limit: {emergency.quantity} units requested, "
+            f"max {MAX_REQUEST_QUANTITY}. Split into multiple alerts or contact regional command.",
+        )
 
     destination_node = hospital_node_map.get(emergency.hospital)
     if not destination_node:
