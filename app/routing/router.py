@@ -1,8 +1,10 @@
 import json
 import hashlib
+import asyncio
 import sentry_sdk
 import pybreaker
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Form, Request, HTTPException
+from fastapi.responses import HTMLResponse
 
 from app.bus import event_bus
 from app.agent.schemas import EmergencyInput, SupplierRoute, RouteResult
@@ -17,13 +19,36 @@ CACHE_TTL_SECONDS = 300
 router = APIRouter()
 
 
+async def _fetch_inventory_rows() -> list[dict[str, str | int | float]]:
+    response = await asyncio.to_thread(
+        lambda: supabase.table("hospital_inventory")
+        .select("name, item, quantity, x, y")
+        .order("name")
+        .order("item")
+        .execute()
+    )
+    return response.data or []
+
+
 @router.post("/emergency")
-async def route_emergency(body: EmergencyInput, request: Request) -> dict:
+async def route_emergency(
+    request: Request,
+    body: EmergencyInput | None = None,
+    message: str | None = Form(default=None),
+) -> dict:
     redis = request.app.state.redis
     graph = request.app.state.static_network_graph
     hospital_node_map = request.app.state.hospital_node_map
 
-    emergency = await parse_emergency(body.message, list(hospital_node_map.keys()))
+    emergency_input = body
+    if emergency_input is None and message:
+        emergency_input = EmergencyInput(message=message)
+    if emergency_input is None:
+        raise HTTPException(422, "Emergency message is required.")
+
+    emergency = await parse_emergency(
+        emergency_input.message, list(hospital_node_map.keys())
+    )
 
     destination_node = hospital_node_map.get(emergency.hospital)
     if not destination_node:
@@ -50,6 +75,8 @@ async def route_emergency(body: EmergencyInput, request: Request) -> dict:
                 routes=[route], total_quantity=emergency.quantity, partial=False
             )
             await event_bus.put({"type": "route_dispatched", "result": result.model_dump()})
+            inventory_rows = await _fetch_inventory_rows()
+            await event_bus.put({"type": "inventory_updated", "rows": inventory_rows})
             return result.model_dump()
         # Stale entry — supplier exhausted since caching; evict and recompute
         await redis.delete(cache_key)
@@ -121,18 +148,24 @@ async def route_emergency(body: EmergencyInput, request: Request) -> dict:
         )
 
     await event_bus.put({"type": "route_dispatched", "result": result.model_dump()})
+    inventory_rows = await _fetch_inventory_rows()
+    await event_bus.put({"type": "inventory_updated", "rows": inventory_rows})
     return result.model_dump()
 
 
 @router.post("/chaos/toggle")
-async def chaos_toggle() -> dict:
+async def chaos_toggle() -> HTMLResponse:
     toggle_breaker()
     await event_bus.put({"type": "circuit_open", "source": "chaos_toggle"})
-    return {"status": "circuit_open"}
+    return HTMLResponse(
+        '<span id="circuit-breaker-badge" class="rounded-full border border-rose-500/70 bg-rose-500/10 px-3 py-1 font-medium text-rose-300">OPEN</span>'
+    )
 
 
 @router.post("/chaos/reset")
-async def chaos_reset() -> dict:
+async def chaos_reset() -> HTMLResponse:
     reset_breaker()
     await event_bus.put({"type": "circuit_closed"})
-    return {"status": "circuit_closed"}
+    return HTMLResponse(
+        '<span id="circuit-breaker-badge" class="rounded-full border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 font-medium text-emerald-300">CLOSED</span>'
+    )
