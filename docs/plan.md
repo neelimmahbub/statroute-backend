@@ -1505,10 +1505,10 @@ Expected: `{"status": "dispatched", "path": {...}}`
 - [ ] **Step 4: Test chaos button**
 
 ```bash
-curl -X POST http://localhost:8000/api/test/toggle-breaker
+curl -X POST http://localhost:8000/api/chaos/toggle
 ```
 
-Expected: `{"status": "circuit_open"}`
+Expected: HTTP 200 (circuit tripped; SSE emits `circuit_open` event)
 
 ```bash
 curl -X POST http://localhost:8000/api/emergency \
@@ -1521,10 +1521,10 @@ Expected: response contains `"fallback": true` in path.
 - [ ] **Step 5: Test circuit reset**
 
 ```bash
-curl -X POST http://localhost:8000/api/test/reset-breaker
+curl -X POST http://localhost:8000/api/chaos/reset
 ```
 
-Expected: `{"status": "circuit_closed"}`
+Expected: HTTP 200 (circuit closed; SSE emits `circuit_closed` event)
 
 - [ ] **Step 6: Open dashboard**
 
@@ -1536,7 +1536,7 @@ Navigate to `http://localhost:8000/?dev=1` — verify CHAOS button visible, SSE 
 pytest tests/ -v
 ```
 
-Expected: 12 tests PASSED (7 schema + 5 engine).
+Expected: 17 tests PASSED (11 schema + 6 engine).
 
 - [ ] **Step 8: Update TODO.md and commit**
 

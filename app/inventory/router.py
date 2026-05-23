@@ -105,8 +105,10 @@ async def list_inventory() -> list[dict[str, str | int | float]]:
     return rows
 
 
-@router.post("/seed")
+@router.post("/seed/reset")
 async def seed_inventory(request: Request) -> dict[str, str | int]:
+    """DESTRUCTIVE — deletes all hospital_inventory rows then re-inserts seed data.
+    Also flushes Redis cache and reloads the in-memory graph. Do not call during live demo."""
     await asyncio.to_thread(
         lambda: supabase.table("hospital_inventory").delete().neq("name", "").execute()
     )
